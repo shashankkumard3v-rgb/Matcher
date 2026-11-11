@@ -1,0 +1,42 @@
+# Scoring rubric weights and thresholds (used from phase 2).
+version: 1
+
+thresholds:
+  floor: 65        # achievable ceiling below this -> DON'T APPLY (hard floor, overridable)
+  target: 85       # loop stops when the score reaches this
+
+weights:           # must add up to 100
+  deterministic:
+    must_have_coverage: 25
+    nice_to_have_coverage: 10
+    title_alignment: 8
+    years_fit: 7
+    ats_format: 5
+  llm:
+    experience_relevance: 20
+    impact_quantification: 10
+    seniority_scope: 10
+    domain_fit: 5
+
+scoring:
+  list_only_credit: 0.5      # skill only in the Skills list, never used in a bullet
+  stuffing_max_mentions: 4   # more mentions than this = keyword stuffing
+  stuffing_credit: 0.75      # credit multiplier when stuffed
+  llm_samples: 1             # >1 runs the LLM rubric N times and takes the median level
+
+gate:
+  max_missing_must_haves: 1  # more than this many must-haves missing everywhere = knockout
+  min_years_ratio: 0.7       # years below 70% of the requirement = knockout
+  max_questions: 5           # questions shown at once (most points at stake first)
+
+loop:
+  max_iterations: 5
+  plateau_min_gain: 2
+  plateau_rounds: 2
+  max_questions_per_round: 5
+  max_changes_per_round: 10  # suggestions the AI may propose in one round
+  max_bullets_per_job: [6, 5, 3]  # bullets allowed per job, newest job first (last number repeats);
+                                  # adding past this means replacing or removing a weaker bullet
+  max_words_per_bullet: 32        # longer bullets are blocked (about 2 lines on the page)
+  suggest_mode: split             # split = plan first, then reword / write new in small AI calls
+                                  # (works better with small models); single = one big call

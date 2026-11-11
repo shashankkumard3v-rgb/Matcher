@@ -1,0 +1,47 @@
+# ==================================================
+#  SAMPLE experience.txt for the fictional Aarav Mehta (testing only)
+#  Matches samples\Sample_Resume_Aarav_Mehta.pdf
+#  Every line starts with the company name so it lands under that job.
+# ==================================================
+
+# ---------- Finlytics Pvt Ltd (Apr 2021 - present) ----------
+Finlytics Pvt Ltd | Role: Software Engineer II | 2021-04 to present | Pune, India (hybrid)
+Finlytics Pvt Ltd | Team: Settlements and Payouts team, 6 engineers, reported to the Engineering Manager
+Finlytics Pvt Ltd | Product: settlement and payout platform for about 12,000 merchants across UPI and card payments
+Finlytics Pvt Ltd | Owned the merchant settlements service end to end: design, deployment, monitoring and on-call
+Finlytics Pvt Ltd | Built a Kafka consumer service in Python that replaced the nightly settlement batch; payout status delay went from up to 24 hours to under 1 minute
+Finlytics Pvt Ltd | The settlement event pipeline handled about 2 million events per day at peak, with retry and dead-letter handling
+Finlytics Pvt Ltd | Deployed services on Kubernetes (AWS EKS) using Helm charts and Docker images built in GitHub Actions
+Finlytics Pvt Ltd | Cut payouts API p99 latency from 2.1s to 450ms at month-end peaks with Redis caching of merchant config and query fixes
+Finlytics Pvt Ltd | Designed PostgreSQL schemas for settlement records and tuned slow report queries from 40s to 6s using indexes and EXPLAIN ANALYZE
+Finlytics Pvt Ltd | Built a daily reconciliation job that matches bank statements with settlement records and flags mismatches for the finance team
+Finlytics Pvt Ltd | Worked with finance and compliance on audit trail requirements; added an append-only audit log table for payout changes
+Finlytics Pvt Ltd | Moved 9 cron batch jobs to Celery workers on AWS, with retries and alerting
+Finlytics Pvt Ltd | Set up Grafana dashboards and Prometheus alerts for API latency and Kafka consumer lag
+Finlytics Pvt Ltd | Mentored 2 junior engineers; ran weekly code reviews and led 3 technical design reviews for the payouts module
+Finlytics Pvt Ltd | Took part in the on-call rotation (1 week in 6) and wrote runbooks for the 5 most common payout incidents
+Finlytics Pvt Ltd | Raised test coverage of the reconciliation module from 45% to 82% with pytest unit and integration tests
+
+# ---------- CartNest (Jul 2019 - Mar 2021) ----------
+CartNest | Role: Software Engineer | 2019-07 to 2021-03 | Pune, India
+CartNest | Team: Orders team, 5 engineers
+CartNest | Product: e-commerce marketplace for home and kitchen products
+CartNest | Built and maintained Django services for order management handling about 20,000 orders per day
+CartNest | Integrated 3 shipping partner APIs and built webhook handling with retries and idempotency keys
+CartNest | Maintained Redis caching for product catalogue pages; cache hit rate around 90%
+CartNest | Wrote REST APIs used by the web and Android apps for order tracking
+CartNest | Dockerized the order service and 2 related services for the move to AWS ECS
+
+# ---------- Brightloop Labs (Jan 2019 - Jun 2019) ----------
+Brightloop Labs | Role: Backend Intern | 2019-01 to 2019-06
+Brightloop Labs | Built internal admin tools in Django for the support team to look up and refund orders
+
+# ---------- Personal projects ----------
+Personal project | ledger-lite | a small double-entry ledger API in FastAPI and PostgreSQL | github.com/aarav-sample/ledger-lite
+Personal project | go-ratelimit | a rate-limiter CLI written in Go while learning the language (not used at work)
+
+# ---------- Achievements ----------
+Achievement | LeetCode: 450+ problems solved, contest rating 1820
+Achievement | Finalist, Finlytics internal hackathon 2023 (built a payout anomaly alert bot)
+Achievement | AWS Certified Developer - Associate, 2023
+Achievement | Education: B.E. Computer Engineering, Savitribai Phule Pune University, 2019

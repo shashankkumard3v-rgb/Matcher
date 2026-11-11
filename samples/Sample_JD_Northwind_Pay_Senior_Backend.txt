@@ -1,0 +1,27 @@
+Senior Backend Engineer - Payments Platform
+Northwind Pay | Bengaluru, India (Hybrid, 3 days in office) | Full-time
+About the role
+Northwind Pay processes card and UPI payments for 40,000 merchants. Our Payments Platform team builds the services that move money reliably: ledgers, settlements and payouts. You will design and own event-driven backend services that handle millions of transactions a day.
+What you will do
+Design, build and operate event-driven microservices for settlements and payouts
+Build and maintain Kafka-based pipelines for payment events
+Own services end to end: design, deployment on Kubernetes, monitoring and on-call
+Improve reliability and latency of high-volume REST APIs
+Mentor engineers and lead technical design reviews
+Work with finance and compliance teams on reconciliation and audit needs
+Requirements (must have)
+5+ years of backend development experience
+Strong Python
+Kafka or a similar event streaming platform
+PostgreSQL, including schema design and query tuning
+Kubernetes and Docker in production
+REST API design
+AWS
+Nice to have
+Go
+Terraform
+Redis
+Experience in payments or fintech
+Observability tools such as Grafana or Prometheus
+Why Northwind Pay
+Competitive salary and ESOPs, a learning budget, and a team that cares about clean, well-tested code.

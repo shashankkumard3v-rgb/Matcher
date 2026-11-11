@@ -1,0 +1,76 @@
+Company: Finlytics Pvt Ltd
+Role: Software Engineer II
+Dates: Apr 2021 - Present
+Location: Pune, India (hybrid)
+Team: Settlements and Payouts team, 6 engineers, reporting to the Engineering Manager
+Product: Settlement and payout platform that moves money to about 12,000 merchants for UPI and card payments
+What I did:
+- Owned the merchant settlements service end to end: design, development, deployment, monitoring and on-call
+- Designed and built a Kafka-based settlement event pipeline in Python that replaced a nightly batch job, cutting payout status delay from up to 24 hours to under 1 minute
+- Scaled the settlement consumers to about 2 million events per day at peak with consumer groups and partition-based parallelism
+- Added retry with exponential backoff and a dead-letter topic so failed settlement events were never lost; replay tool brought back 100% of failed events
+- Made payment event processing idempotent using unique event keys in PostgreSQL, removing duplicate payouts caused by redelivered messages
+- Built REST APIs in FastAPI for settlements, payouts and merchant reports, used by 3 internal teams and the merchant dashboard
+- Wrote OpenAPI specs and versioned the payouts API (v1 to v2) without breaking existing clients
+- Reduced payouts API p99 latency from 2.1s to 450ms at month-end peaks by caching merchant configuration in Redis and removing N+1 queries
+- Designed PostgreSQL schemas for settlement records, ledger entries and payout batches, including partitioning of the settlements table by month
+- Tuned slow reporting queries from 40s to 6s using composite indexes and EXPLAIN ANALYZE
+- Built a daily bank reconciliation job that matches bank statement files from S3 with settlement records and flags mismatches, cutting manual finance work from 3 hours to 20 minutes a day
+- Worked with finance and compliance teams on audit requirements and added an append-only audit log for every payout state change
+- Moved 9 cron batch jobs to Celery workers on AWS with retries, timeouts and failure alerts
+- Containerized services with Docker and deployed them to Kubernetes (AWS EKS) using Helm charts
+- Set up CI pipelines in GitHub Actions for tests, linting and Docker image builds; deploy time went from about 40 minutes to 12 minutes
+- Built Grafana dashboards and Prometheus alerts for API latency, error rates and Kafka consumer lag
+- Took part in the on-call rotation (1 week in 6) and wrote runbooks for the 5 most common payout incidents
+- Led the root-cause analysis for a month-end payout delay incident and shipped fixes that prevented repeats over the next 12 months
+- Raised test coverage of the reconciliation module from 45% to 82% with pytest unit and integration tests using Testcontainers
+- Mentored 2 junior engineers through onboarding, pairing sessions and weekly code reviews
+- Led 3 technical design reviews for the payouts module and wrote the design docs
+- Worked with product managers to break down the instant payouts feature into milestones and delivered it in 2 quarters
+- Raised test coverage of the payment reconciliation module from 45% to 82% using pytest unit and integration tests with Testcontainers, reducing manual finance work from 3 hours to 20 minutes per day.
+- Built Grafana dashboards and Prometheus alerts to monitor API latency, error rates, and Kafka consumer lag for a settlement pipeline handling approximately 2 million events per day during on-call rotations.
+- Increased test coverage from 45% to 82%
+- Reduced manual finance work from 3 hours to 20 minutes daily
+
+Company: CartNest
+Role: Software Engineer
+Dates: Jul 2019 - Mar 2021
+Location: Pune, India
+Team: Orders team, 5 engineers
+Product: E-commerce marketplace for home and kitchen products with web and Android apps
+What I did:
+- Built and maintained Django services for order management handling about 20,000 orders per day
+- Designed the order state machine (placed, packed, shipped, delivered, returned) and its REST APIs
+- Integrated 3 shipping partner APIs for label creation, pickup booking and tracking
+- Built webhook handling for shipping updates with retries and idempotency keys, which stopped duplicate shipment updates
+- Wrote order tracking REST APIs used by the web and Android apps
+- Maintained Redis caching for product catalogue pages with a cache hit rate of about 90%
+- Moved email and SMS notifications to Celery background tasks, cutting checkout API response time by about 35%
+- Built the returns and refunds flow with the payments team, including partial refunds
+- Optimized MySQL queries on the orders table and added indexes for the seller dashboard
+- Dockerized the order service and 2 related services for the move to AWS ECS
+- Added Sentry error tracking and structured logging to the order services
+- Supported 2 big sale events (Diwali) with load testing in Locust and capacity planning
+- Wrote unit tests with pytest and set up Jenkins jobs to run them on every merge request
+
+Company: Brightloop Labs
+Role: Backend Intern
+Dates: Jan 2019 - Jun 2019
+Location: Pune, India
+What I did:
+- Built internal admin tools in Django for the support team to look up orders and issue refunds
+- Added role-based access control to the admin panel
+- Wrote CSV export scripts in Python for weekly support reports
+- Fixed bugs in the customer ticket system and wrote tests for them
+
+Section: Personal projects
+- ledger-lite: a double-entry ledger REST API in FastAPI and PostgreSQL with idempotent transfers, github.com/aarav-sample/ledger-lite
+- go-ratelimit: a token-bucket rate limiter CLI written in Go while learning the language, not used at work
+- infra-playground: Terraform modules for a VPC, RDS and ECS service on AWS, built while learning Terraform
+
+Section: Achievements
+- LeetCode: 450+ problems solved, contest rating 1820, leetcode.com/u/aarav-sample
+- Finalist, Finlytics internal hackathon 2023, built a payout anomaly alert bot
+- AWS Certified Developer - Associate, 2023
+- Spot award at Finlytics for the month-end incident fix, 2022
+- Education: B.E. Computer Engineering, Savitribai Phule Pune University, 2019

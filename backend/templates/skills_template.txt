@@ -1,0 +1,27 @@
+# SKILLS NOTES - write in plain text.
+# Lines starting with # are hints; Matcher ignores them. Delete them when done.
+# One skill per line: the skill, where you used it (company or project),
+# what you did with it, and your level (Strong / Working / Basic).
+# A skill tied to real work can become a resume bullet; one only listed earns half credit.
+
+Section: Programming languages
+- [Python]: used at [Company], [what you did with it]. Level: [Strong]
+- [SQL]: used at [Company], [what you did]. Level: [ ]
+
+Section: Frameworks and libraries
+- [FastAPI / Django / React ...]: used at [Company], [what you did]. Level: [ ]
+
+Section: Databases and messaging
+- [PostgreSQL / Redis / Kafka ...]: used at [Company], [what you did]. Level: [ ]
+
+Section: Cloud and DevOps
+- [AWS / Docker / Kubernetes / CI-CD / Terraform ...]: used at [Company], [what you did]. Level: [ ]
+
+Section: Testing and monitoring
+- [pytest / Grafana / Prometheus ...]: used at [Company], [what you did]. Level: [ ]
+
+Section: Tools
+- [Git, Linux, Postman, Jira]: daily use at [Company]
+
+Section: Soft skills (only with an example)
+- [Mentoring / leading / working with other teams]: at [Company], [example]

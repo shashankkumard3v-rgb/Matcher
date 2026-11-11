@@ -1,0 +1,45 @@
+{
+  "title": "Senior Backend Engineer - Payments Platform",
+  "company": "Northwind Pay",
+  "seniority": "senior",
+  "must_have": [
+    "Python",
+    "Kafka",
+    "PostgreSQL",
+    "Kubernetes",
+    "Docker",
+    "REST API design",
+    "AWS"
+  ],
+  "nice_to_have": [
+    "Go",
+    "Terraform",
+    "Redis",
+    "Experience in payments or fintech",
+    "Grafana",
+    "Prometheus"
+  ],
+  "years_required": 5.0,
+  "location": "Bengaluru, India",
+  "work_auth": null,
+  "domain": "Payments Platform",
+  "responsibilities": [
+    "Design, build and operate event-driven microservices for settlements and payouts",
+    "Build and maintain Kafka-based pipelines for payment events",
+    "Own services end to end: design, deployment on Kubernetes, monitoring and on-call",
+    "Improve reliability and latency of high-volume REST APIs",
+    "Mentor engineers and lead technical design reviews",
+    "Work with finance and compliance teams on reconciliation and audit needs"
+  ],
+  "languages": [],
+  "capabilities": [
+    "backend_apis",
+    "event_driven",
+    "data_modeling",
+    "distributed_systems",
+    "performance",
+    "reliability",
+    "payments_money",
+    "cloud_infra"
+  ]
+}

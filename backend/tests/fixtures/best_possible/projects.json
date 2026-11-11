@@ -1,0 +1,36 @@
+{
+  "projects": [
+    {
+      "id": "payment-reconciliation-and-settlement-pipeline",
+      "name": "Payment Reconciliation and Settlement Pipeline",
+      "employer": "Finlytics Pvt Ltd",
+      "role": "Software Engineer II",
+      "start": "2021-04",
+      "end": "present",
+      "team_size": null,
+      "problem": null,
+      "what_i_did": [
+        "Raised test coverage of the payment reconciliation module from 45% to 82% using pytest unit and integration tests with Testcontainers, reducing manual finance work from 3 hours to 20 minutes per day.",
+        "Built Grafana dashboards and Prometheus alerts to monitor API latency, error rates, and Kafka consumer lag for a settlement pipeline handling approximately 2 million events per day during on-call rotations."
+      ],
+      "tech": [
+        "pytest",
+        "Testcontainers",
+        "Grafana",
+        "Prometheus",
+        "Kafka"
+      ],
+      "results": [
+        "Increased test coverage from 45% to 82%",
+        "Reduced manual finance work from 3 hours to 20 minutes daily"
+      ],
+      "notes": null
+    }
+  ],
+  "profile": {
+    "languages": [],
+    "facts": [],
+    "links": []
+  },
+  "issues": []
+}

@@ -1,0 +1,66 @@
+# How the final Word resume looks. Phase 5.
+page:
+  size: A4            # 21.0 x 29.7 cm
+  max_pages: 1
+
+font:
+  family: Calibri     # Word on Windows; LibreOffice uses the metric-identical Carlito
+
+# Sections, in order. Contact details always go at the top.
+# Allowed: summary, skills, experience, achievements, education, certifications
+sections: [summary, skills, experience, achievements]
+
+headings:
+  summary: SUMMARY
+  skills: SKILLS
+  experience: EXPERIENCE
+  achievements: ACHIEVEMENTS
+  education: EDUCATION
+  certifications: CERTIFICATIONS
+
+# Contact links: how each link reads on the page (all are clickable)
+#   label     -> "LinkedIn"                     (cleanest; some ATS keep only the visible text)
+#   label_url -> "LinkedIn: linkedin.com/in/x"  (most ATS-safe, takes more space)
+#   url       -> "linkedin.com/in/x"
+link_text: label
+
+# Achievements = the resume's achievements + certifications (awards, wins, certs)
+achievements_include_certifications: true
+
+# One-page fit: the builder searches between these two looks to fill the page.
+fit:
+  target_fill_min: 0.93   # below this the page looks empty
+  target_fill_max: 0.99   # above this it's too tight
+  compact:                # smallest allowed (still readable)
+    body_pt: 10
+    name_pt: 16
+    heading_pt: 11
+    margin_cm: 1.27
+    line_spacing: 1.0
+    para_after_pt: 0
+    bullet_after_pt: 0
+    section_before_pt: 4
+  roomy:                  # largest allowed (still looks professional)
+    body_pt: 11.5
+    name_pt: 20
+    heading_pt: 12.5
+    margin_cm: 2.0
+    line_spacing: 1.15
+    para_after_pt: 3
+    bullet_after_pt: 2
+    section_before_pt: 10
+  # A short resume: once the roomy look still leaves the page part-empty, only the SPACING keeps
+  # growing (up to these limits) so the page fills evenly top to bottom. Fonts and margins stay
+  # at their roomy size. If it's still short after this, Matcher says "add content".
+  stretch:
+    line_spacing: 1.3
+    para_after_pt: 6
+    bullet_after_pt: 5
+    section_before_pt: 18
+
+# Bullets all end the same way on the page: "none" (no full stop), "period", or "auto" (whatever
+# most of your bullets already do). Only the page changes; your saved text stays as written.
+bullet_end: auto
+
+# How the page is measured: auto | word | libreoffice
+renderer: auto

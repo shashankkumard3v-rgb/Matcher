@@ -1,0 +1,75 @@
+{
+  "contact": {
+    "name": "Aarav Mehta",
+    "email": "aarav.mehta@example.com",
+    "phone": "+91 90000 12345",
+    "location": "Pune, India",
+    "links": [
+      "LinkedIn",
+      "LeetCode"
+    ]
+  },
+  "summary": "Backend engineer with 6 years of experience building Python services for fintech and e-commerce products. Comfortable owning APIs end to end, from design to on-call.",
+  "experience": [
+    {
+      "title": "Software Engineer II",
+      "company": "Finlytics Pvt Ltd",
+      "location": null,
+      "start": "2021-04",
+      "end": "present",
+      "bullets": [
+        "Designed and built REST APIs in FastAPI for settlements and payouts, applying REST API design principles to version v1 to v2 and reducing p99 latency from 2.1s to 450ms.",
+        "Designed PostgreSQL schemas for settlement records and added indexes that cut report query time from 40s to 6s",
+        "Containerized services with Docker and deployed to Kubernetes on AWS, while migrating 9 cron batch jobs to Celery workers.",
+        "Led 3 technical design reviews and mentored 2 junior engineers, while owning the payouts module end-to-end including on-call support.",
+        "Wrote unit and integration tests for payment reconciliation logic",
+        "Designed and built a Kafka-based settlement event pipeline in Python, scaling to 2 million events per day with partition-based parallelism.",
+        "Built Grafana dashboards and Prometheus alerts for API latency, error rates and Kafka consumer lag."
+      ]
+    },
+    {
+      "title": "Software Engineer",
+      "company": "CartNest",
+      "location": null,
+      "start": "2019-07",
+      "end": "2021-03",
+      "bullets": [
+        "Developed Django services for order management handling 20K orders per day",
+        "Integrated third-party shipping APIs and handled webhook retries",
+        "Maintained Redis caching for product catalogue pages"
+      ]
+    },
+    {
+      "title": "Intern - Backend",
+      "company": "Brightloop Labs",
+      "location": null,
+      "start": "2019-01",
+      "end": "2019-06",
+      "bullets": [
+        "Built internal admin tools in Django for the support team"
+      ]
+    }
+  ],
+  "skills": [
+    "Python",
+    "Django",
+    "FastAPI",
+    "PostgreSQL",
+    "Redis",
+    "Docker",
+    "Kubernetes",
+    "AWS",
+    "REST APIs",
+    "Git",
+    "Celery",
+    "Linux"
+  ],
+  "education": [],
+  "certifications": [],
+  "achievements": [
+    "Finalist, Finlytics internal hackathon 2023"
+  ],
+  "languages": [],
+  "projects": [],
+  "unparsed": []
+}

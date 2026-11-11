@@ -1,0 +1,40 @@
+# EXPERIENCE NOTES - write in plain text, as much detail as you like.
+# Lines starting with # are hints; Matcher ignores them. Delete them when done.
+# Start each job with "Company:" (name exactly as on your resume).
+# Everything under it belongs to that job. Only write what's true;
+# add numbers only if you can defend them in an interview.
+
+Company: [Company name, exactly as on your resume]
+Role: [Your job title]
+Dates: [Start month year] - [End month year or Present]
+Location: [City / Remote / Hybrid]
+Team: [Team name, how many people, who you reported to]
+Product: [What the product does and who uses it]
+What I did:
+- [Main responsibility / what you owned]
+- [Something you built, the tech you used, and why it mattered]
+- [Something you improved: before -> after, e.g. 40s -> 6s]
+- [Scale: users, requests/day, orders/day, data size]
+- [A problem or incident you fixed and its impact]
+- [On-call, code reviews, design docs, releases]
+- [Mentoring, leading, working with other teams]
+- [Testing, CI/CD, monitoring you set up]
+
+Company: [Previous company]
+Role: [Title]
+Dates: [Start] - [End]
+Team: [Team, size]
+Product: [What it does]
+What I did:
+- [Responsibility]
+- [Built ... using ... so that ...]
+- [Improved ... from ... to ...]
+
+Section: Personal projects
+- [Project name]: [what it does], built with [tech]. Link: [url]
+
+Section: Achievements
+- LeetCode: [N problems solved, contest rating N]
+- [Hackathon / award, year]
+- [Certification, issuer, year]
+- Education: [Degree, college, year]

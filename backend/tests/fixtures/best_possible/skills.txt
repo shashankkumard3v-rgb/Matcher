@@ -1,0 +1,42 @@
+Section: Programming languages
+- Python: used at Finlytics Pvt Ltd and CartNest for 6 years, APIs, Kafka consumers, Celery jobs, scripts. Level: Strong
+- SQL: used at Finlytics Pvt Ltd and CartNest, schema design, query tuning, reports. Level: Strong
+- Go: personal project go-ratelimit only, not used at work. Level: Basic
+
+Section: Frameworks and libraries
+- FastAPI: used at Finlytics Pvt Ltd for settlements and payouts APIs. Level: Strong
+- Django and Django REST Framework: used at CartNest and Brightloop Labs for order services and admin tools. Level: Strong
+- Celery: used at Finlytics Pvt Ltd and CartNest for background jobs and scheduled tasks. Level: Working
+
+Section: Databases and messaging
+- PostgreSQL: used at Finlytics Pvt Ltd, schemas, partitioning, indexes, EXPLAIN ANALYZE. Level: Strong
+- MySQL: used at CartNest for the orders database and seller dashboard queries. Level: Working
+- Redis: used at Finlytics Pvt Ltd and CartNest for caching. Level: Working
+- Kafka: used at Finlytics Pvt Ltd, settlement event consumers, about 2 million events per day, dead-letter topics. Level: Working
+
+Section: Cloud and DevOps
+- AWS (EKS, ECS, EC2, S3, RDS, SQS): used at Finlytics Pvt Ltd and CartNest, certified Developer Associate 2023. Level: Working
+- Docker: used at Finlytics Pvt Ltd and CartNest to containerize services. Level: Strong
+- Kubernetes and Helm: used at Finlytics Pvt Ltd, deployed services on EKS, on-call. Level: Working
+- GitHub Actions: used at Finlytics Pvt Ltd for CI pipelines. Level: Working
+- Jenkins: used at CartNest to run tests on merge requests. Level: Basic
+- Terraform: personal project infra-playground only. Level: Basic
+
+Section: Testing and monitoring
+- pytest and Testcontainers: used at Finlytics Pvt Ltd, reconciliation coverage 45% to 82%. Level: Strong
+- Locust: used at CartNest for load testing before sale events. Level: Basic
+- Grafana and Prometheus: used at Finlytics Pvt Ltd for latency, error and consumer lag dashboards and alerts. Level: Working
+- Sentry: used at CartNest for error tracking. Level: Working
+
+Section: Architecture
+- REST API design and OpenAPI: used at Finlytics Pvt Ltd and CartNest, versioned APIs. Level: Strong
+- Event-driven microservices: used at Finlytics Pvt Ltd, replaced a nightly batch with a Kafka pipeline. Level: Working
+- Idempotency and retries: used at Finlytics Pvt Ltd and CartNest for payments and webhooks. Level: Working
+
+Section: Tools
+- Git, Linux, Postman, Jira: daily use at Finlytics Pvt Ltd and CartNest
+
+Section: Soft skills
+- Mentoring: at Finlytics Pvt Ltd, mentored 2 junior engineers
+- Design reviews: at Finlytics Pvt Ltd, led 3 for the payouts module
+- Working with other teams: at Finlytics Pvt Ltd with finance, compliance and product

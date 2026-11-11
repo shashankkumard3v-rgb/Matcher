@@ -1,0 +1,50 @@
+# The fixed list of CAPABILITIES (kinds of work) used to describe saved resumes and to read
+# job descriptions. Both sides use exactly these ids, so they can be compared reliably.
+# Add or edit entries freely; bump "version" so saved resumes know their profile is older.
+version: 1
+capabilities:
+  # building software
+  backend_apis: "Backend services and APIs (REST/gRPC/GraphQL design and building)"
+  event_driven: "Event-driven or streaming systems (queues, pub/sub, Kafka-style pipelines)"
+  data_pipelines: "Data pipelines / ETL / batch processing / scheduled jobs"
+  data_modeling: "Database schema design, data modelling, query tuning"
+  distributed_systems: "Distributed systems, microservices, service-to-service communication"
+  performance: "Performance and latency optimisation, caching, profiling"
+  scalability: "Scaling systems for high traffic or large data volumes"
+  reliability: "Reliability engineering: retries, idempotency, fault tolerance, SLOs"
+  integrations: "Third-party / partner API integrations, webhooks"
+  frontend_ui: "Frontend / UI development (web or mobile interfaces)"
+  mobile_apps: "Native or cross-platform mobile apps"
+  security: "Application security, auth, encryption, compliance controls"
+  payments_money: "Money movement: payments, ledgers, settlements, reconciliation"
+  search_ranking: "Search, ranking or recommendation systems"
+  ml_models: "Building or training machine-learning models"
+  ml_ops: "Deploying and operating ML / LLM systems in production"
+  llm_apps: "LLM / generative-AI applications (prompting, RAG, agents)"
+  analytics_bi: "Analytics, reporting, dashboards, BI"
+  # running software
+  cloud_infra: "Cloud infrastructure (AWS/GCP/Azure services)"
+  containers_k8s: "Containers and orchestration (Docker, Kubernetes, Helm)"
+  infra_as_code: "Infrastructure as code (Terraform, CloudFormation, Pulumi)"
+  ci_cd: "CI/CD pipelines, build and release automation"
+  observability: "Monitoring, logging, alerting, dashboards for systems"
+  on_call_ops: "On-call, incident response, runbooks, production support"
+  migrations: "System or platform migrations (re-platforming, moving services/data)"
+  cost_optimisation: "Cloud or infrastructure cost reduction"
+  # quality
+  testing: "Automated testing (unit, integration, end-to-end), test coverage"
+  code_quality: "Code reviews, refactoring, engineering standards"
+  # ownership and people
+  end_to_end_ownership: "Owning a system or service end to end (design to production)"
+  system_design: "Technical design, architecture decisions, design docs"
+  tech_leadership: "Leading technical work or a team's technical direction"
+  people_management: "Managing people (hiring, reviews, 1:1s)"
+  mentoring: "Mentoring or coaching other engineers"
+  cross_team: "Working across teams or with non-engineering stakeholders"
+  product_delivery: "Planning and delivering features/projects (milestones, scoping)"
+  requirements: "Gathering and shaping requirements with users or business"
+  documentation: "Technical documentation, knowledge sharing"
+  # other
+  automation_scripting: "Automating manual work with scripts or tools"
+  internal_tools: "Building internal or admin tools"
+  research: "Research, prototyping, proofs of concept"

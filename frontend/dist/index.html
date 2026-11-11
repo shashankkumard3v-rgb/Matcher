@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Matcher" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="description" content="Score your resume against a job description and improve it, honestly." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <title>Matcher</title>
+    <!-- shown instantly, before the app's code arrives: no white flash, same colours as the app -->
+    <style>
+      html, body { margin: 0; background: #f6f7fb; }
+      @media (prefers-color-scheme: dark) { html, body { background: #0f1115; } }
+      .splash { min-height: 100vh; min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 14px;
+                font: 600 15px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #5d6472; }
+      .splash img { width: 56px; height: 56px; border-radius: 14px; }
+      .splash i { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #e3e6ee; border-top-color: #1f4fd1; animation: s 0.9s linear infinite; }
+      @media (prefers-color-scheme: dark) { .splash { color: #9aa1ae; } .splash i { border-color: #2a2e37; border-top-color: #5b8cff; } }
+      @keyframes s { to { transform: rotate(360deg); } }
+    </style>
+    <script type="module" crossorigin src="/assets/index-P-BYbbQc.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Cv6epyp0.css">
+  </head>
+  <body>
+    <div id="root"><div class="splash"><img src="/icon-192.png" alt="" /><span>Matcher</span><i></i></div></div>
+  </body>
+</html>

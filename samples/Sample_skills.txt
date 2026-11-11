@@ -1,0 +1,47 @@
+# ==================================================
+#  SAMPLE skills.txt for the fictional Aarav Mehta (testing only)
+#  Format: Skill | where I used it | what I did with it | level
+# ==================================================
+
+# ---------- Languages ----------
+Python | Finlytics Pvt Ltd, CartNest | main language for 6 years: APIs, Kafka consumers, batch jobs | Strong
+SQL | Finlytics Pvt Ltd | schema design, query tuning, reconciliation reports | Strong
+Go | Personal project | built a small rate-limiter CLI while learning (not used at work) | Basic
+
+# ---------- Frameworks ----------
+FastAPI | Finlytics Pvt Ltd | built the merchant settlements and payouts APIs | Strong
+Django | CartNest, Brightloop Labs | order management services and internal admin tools | Strong
+Celery | Finlytics Pvt Ltd | moved 9 cron jobs to Celery workers with retries | Working
+
+# ---------- Databases ----------
+PostgreSQL | Finlytics Pvt Ltd | settlement schemas, indexes, EXPLAIN ANALYZE tuning (40s to 6s) | Strong
+Redis | Finlytics Pvt Ltd, CartNest | caching merchant config and product catalogue pages | Working
+
+# ---------- Messaging ----------
+Kafka | Finlytics Pvt Ltd | built and ran settlement event consumers, about 2M events/day, dead-letter queues | Working
+
+# ---------- Cloud & DevOps ----------
+AWS (EKS, EC2, S3, RDS, SQS) | Finlytics Pvt Ltd | ran production services; AWS Certified Developer 2023 | Working
+Docker | Finlytics Pvt Ltd, CartNest | containerized services for EKS and ECS | Strong
+Kubernetes | Finlytics Pvt Ltd | deployed services on EKS with Helm, handled on-call | Working
+Helm | Finlytics Pvt Ltd | wrote and maintained charts for settlement services | Working
+GitHub Actions | Finlytics Pvt Ltd | CI pipelines for tests and image builds | Working
+Terraform | Personal project | wrote a module for a VPC and RDS in a learning project | Basic
+
+# ---------- Architecture ----------
+REST API design | Finlytics Pvt Ltd, CartNest | designed versioned APIs used by 3 internal teams and mobile apps | Strong
+Microservices / event-driven design | Finlytics Pvt Ltd | replaced a nightly batch with an event pipeline | Working
+Idempotency and retries | CartNest, Finlytics Pvt Ltd | webhook handling and payment event processing | Working
+
+# ---------- Testing & observability ----------
+pytest | Finlytics Pvt Ltd | raised reconciliation test coverage from 45% to 82% | Strong
+Grafana | Finlytics Pvt Ltd | latency and consumer-lag dashboards | Working
+Prometheus | Finlytics Pvt Ltd | alerts for API latency and Kafka lag | Working
+
+# ---------- Tools ----------
+Git, Linux, Postman, Jira | Finlytics Pvt Ltd, CartNest | daily use | Strong
+
+# ---------- Soft skills ----------
+Mentoring | Finlytics Pvt Ltd | mentored 2 junior engineers, weekly code reviews | Working
+Technical design reviews | Finlytics Pvt Ltd | led 3 design reviews for the payouts module | Working
+Working with finance and compliance | Finlytics Pvt Ltd | reconciliation and audit trail requirements | Working

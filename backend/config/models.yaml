@@ -1,0 +1,121 @@
+# Which AI provider and models Matcher uses.
+#
+# provider:
+#   auto        -> the first provider in auto_order that has an API key in backend/.env
+#                  and models configured below
+#   claude | gemini | openrouter | openai -> always that one
+#
+# Every provider runs the SAME step instructions (backend/skills/<name>/SKILL.md):
+#   claude          -> as real Claude Agent Skills (falls back to prompts if Skills aren't
+#                      enabled for your account; see claude.agent_skills)
+#   everything else -> the SKILL.md text (+ any extra text files in the folder) is the prompt
+#
+# A run locks the provider + model on its first score: switching mid-run is refused, so every
+# version is judged by the same judge.
+provider: auto
+auto_order: [claude, gemini, openrouter, openai]
+
+# ---------- Claude API (ANTHROPIC_API_KEY) ----------
+# Model ids: https://platform.claude.com/docs/en/models/overview
+#   claude-haiku-5-5 (cheapest), claude-sonnet-5-5, claude-opus-5-5 (strongest)
+claude:
+  agent_skills: auto    # auto | on | off  (off = always send SKILL.md as the prompt)
+  defaults:
+    max_tokens: 8000
+    timeout_seconds: 300
+    temperature: null   # null = not sent (some models only allow the default)
+  steps:
+    parse:
+      model: claude-sonnet-5-5
+    score:
+      model: claude-sonnet-5-5
+    improve:            # also used by the fit agent
+      model: claude-sonnet-5-5
+    truth_check:
+      model: claude-sonnet-5-5
+    context:
+      model: claude-sonnet-5-5
+
+# ---------- Google Gemini (GEMINI_API_KEY) ----------
+# Model ids: https://ai.google.dev/gemini-api/docs/pricing
+# See which ones YOUR key can use: http://localhost:8000/api/providers/gemini/models
+# Free tier: Google may use what you send to improve its products and humans may review it.
+# Don't send a real resume on the free tier; use a paid (billing-enabled) key for that.
+#
+# Each step tries its models in order. A busy model (HTTP 503 "high demand") is skipped
+# right away and retried in the next pass; a model your key can't use (404) is dropped.
+gemini:
+  defaults:
+    temperature: 0
+    max_tokens: 8000      # Gemini 3 models always "think"; that uses part of this budget
+    timeout_seconds: 120
+    retries_per_model: 3  # passes over the whole model list
+    backoff_seconds: [3, 10, 25]   # wait between passes (plus a little random jitter)
+    json_mode: true       # turned off automatically if a model rejects it
+  # reasoning_effort: how long the model "thinks" before answering. "low" is much faster and
+  # fine for simple steps; leave it out to use the model's default (slower, more careful).
+  steps:
+    parse:                # reading files: light models first, they're faster and less busy
+      models: [gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-3.8-flash, gemini-3.6-flash, gemini-2.5-flash]
+      reasoning_effort: low
+    score:                # the first model that answers is locked for the whole run (careful: default thinking)
+      models: [gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash]
+    improve:
+      models: [gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash]
+      reasoning_effort: low
+    truth_check:
+      models: [gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash]
+      reasoning_effort: low
+    context:              # turning your answer into notes: simple, so the fast models go first
+      models: [gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-3.8-flash, gemini-3.6-flash, gemini-2.5-flash]
+      reasoning_effort: low
+
+# ---------- OpenRouter (OPENROUTER_API_KEY): many models with one key ----------
+openrouter:
+  defaults:
+    temperature: 0
+    max_tokens: 4000
+    timeout_seconds: 120
+    retries_per_model: 3
+    backoff_seconds: [3, 10, 25]
+    json_mode: true
+  steps:            # first model is tried first; next ones are fallbacks
+    parse:
+      models:
+        - deepseek/deepseek-v4-flash:free
+        - deepseek/deepseek-chat
+    score:
+      models:
+        - deepseek/deepseek-v4-flash:free
+    improve:
+      models:
+        - deepseek/deepseek-v4-flash:free
+    truth_check:
+      models:
+        - deepseek/deepseek-v4-flash:free
+    context:          # turning your answers into template entries
+      models:
+        - deepseek/deepseek-v4-flash:free
+
+# ---------- Any other OpenAI-compatible API (OPENAI_API_KEY [+ OPENAI_BASE_URL]) ----------
+# OpenAI itself, Groq, Together, a local Ollama (OPENAI_BASE_URL=http://localhost:11434/v1), ...
+# Fill in the model names you have; this provider is skipped by `auto` until you do.
+openai:
+  base_url: https://api.openai.com/v1
+  defaults:
+    temperature: 0
+    max_tokens: 4000
+    timeout_seconds: 120
+    retries_per_model: 2
+    json_mode: true
+  steps:
+    parse:
+      models: []
+    score:
+      models: []
+    improve:
+      models: []
+    truth_check:
+      models: []
+    context:
+      models: []
