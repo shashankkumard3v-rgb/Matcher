@@ -69,6 +69,18 @@ def google_client_id() -> str | None:
     return os.getenv("GOOGLE_CLIENT_ID") or None
 
 
+def allowed_emails() -> set[str]:
+    """ALLOWED_EMAILS in .env: who may sign in (comma-separated). Empty = any Google account.
+    Set it whenever the server is reachable from the internet, or anyone could use your AI key."""
+    raw = os.getenv("ALLOWED_EMAILS") or ""
+    return {e.strip().lower() for e in raw.replace(";", ",").replace(" ", ",").split(",") if e.strip()}
+
+
+def email_allowed(email: str | None) -> bool:
+    allowed = allowed_emails()
+    return not allowed or (email or "").strip().lower() in allowed
+
+
 def mongodb_uri() -> str | None:
     return os.getenv("MONGODB_URI") or None
 

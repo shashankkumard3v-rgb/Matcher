@@ -90,6 +90,11 @@ async def sign_in_google(body: GoogleBody, request: Request, response: Response)
         msg = str(e) if "isn't installed" in str(e) else \
             "Couldn't reach Google to check your sign-in. Check your internet and try again."
         raise HTTPException(503, {"code": "google_unreachable", "message": msg}) from e
+    if not claims.get("email_verified", False) or not config.email_allowed(claims.get("email")):
+        logger.warning("Sign-in refused for %s (not in ALLOWED_EMAILS)", claims.get("email"))
+        raise HTTPException(403, {"code": "not_allowed", "message":
+            f"{claims.get('email')} isn't allowed to use this Matcher. The owner can add it to "
+            "ALLOWED_EMAILS in the server settings."})
     try:
         store = get_store()
         first = await store.count_users() == 0

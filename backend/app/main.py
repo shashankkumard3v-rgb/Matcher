@@ -51,6 +51,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Sign-in: every /api call except these needs a valid session cookie (Google sign-in).
+_PUBLIC = {"/api/health", "/api/app-version", "/api/auth/config", "/api/auth/google", "/api/auth/logout"}
+
+
+# Runs live in MongoDB (app/data/runstore.py): missing runs are restored to disk before a
+# request, and whatever a change request wrote is saved back after it. Registered first, so it
+# runs innermost: inside the sign-in check (it knows who you are) and inside the per-run lock.
+@app.middleware("http")
+async def keep_runs_in_db(request: Request, call_next):
+    from starlette.concurrency import run_in_threadpool
+    from app.data import runstore
+    path = request.url.path
+    if not path.startswith("/api/") or path in _PUBLIC or not runstore.enabled():
+        return await call_next(request)
+    try:
+        await run_in_threadpool(runstore.restore)
+    except Exception as e:  # database unreachable: say so instead of showing empty runs
+        log.warning("Couldn't restore runs from the database: %s", e)
+        return JSONResponse({"detail": {"code": "db_unavailable", "message":
+                             f"Couldn't load your runs from the database: {e}"}}, status_code=503)
+    response = await call_next(request)
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        try:
+            await run_in_threadpool(runstore.sync)
+        except Exception as e:  # the change is on disk; the next request tries again
+            log.warning("Couldn't save runs to the database (will retry): %s", e)
+    return response
+
+
 # One change at a time per run: every step reads the run's files, may wait for the AI, then
 # writes them back. Two at once (say, skipping a question while an answer is being read)
 # would let the second overwrite the first.
@@ -67,8 +96,6 @@ async def one_change_per_run(request: Request, call_next):
             return await call_next(request)
     return await call_next(request)
 
-# Sign-in: every /api call except these needs a valid session cookie (Google sign-in).
-_PUBLIC = {"/api/health", "/api/app-version", "/api/auth/config", "/api/auth/google", "/api/auth/logout"}
 
 
 @app.middleware("http")
@@ -83,6 +110,8 @@ async def require_sign_in(request: Request, call_next):
         except AuthStoreError as e:
             if path not in _PUBLIC:
                 return JSONResponse({"detail": {"code": "db_unavailable", "message": str(e)}}, status_code=503)
+    if request.state.user is not None and not config.email_allowed(request.state.user.email):
+        request.state.user = None         # signed in before ALLOWED_EMAILS was set: not any more
     if path.startswith("/api/") and path not in _PUBLIC and request.state.user is None:
         return JSONResponse({"detail": {"code": "not_signed_in", "message": "Sign in with Google."}},
                             status_code=401)

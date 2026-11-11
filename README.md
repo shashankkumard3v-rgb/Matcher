@@ -55,7 +55,10 @@ with HTTPS when the server moves to the cloud: Google sign-in doesn't work on ht
 Everyone signs in with Google; each account sees only its own data. Stored in MongoDB Atlas
 (database `MONGODB_DB`, default `matcher`): users and sign-in sessions, your My info notes
 (experience, skills, project template, with the last 10 versions kept), and your saved resumes
-(with their original files). Runs are still files in `backend\users\<your user id>\runs\`.
+(with their original files), and every run (all its files: scores, versions, downloads). The
+folder `backend\users\<your user id>\runs\` is only a working copy that's kept in step with
+the database; runs made before this was added upload themselves the first time you change
+something. `ALLOWED_EMAILS` in `.env` limits who can sign in (empty = any Google account).
 Your old notes files are copied into the database the first time you sign in.
 
 1. **MongoDB Atlas** (free): https://cloud.mongodb.com -> create a free cluster ->
@@ -89,6 +92,36 @@ If the server ever misses an update anyway, the app shows **"Restart the server"
 close the server window and start `run.bat` again.
 
 The web app (`frontend\dist`) needs no restart at all: refresh the browser (Ctrl+F5).
+
+## Deploy online (one service: web app + API together)
+
+Matcher deploys as ONE Docker image (`Dockerfile` at the top of the repo): it builds the web
+app and serves it from the same FastAPI server, so there is one thing to deploy and one URL.
+`render.yaml` describes it for Render (free plan: sleeps after 15 minutes unused, about a
+minute to wake up). Every push to `main` redeploys it automatically.
+
+Where things live online:
+- **Your data** (accounts, notes, saved resumes, and every run with its versions and
+  downloads) is in MongoDB Atlas. The server's disk is only a working copy, so Render wiping
+  it on sleep loses nothing (`backend/app/data/runstore.py`).
+- **Secrets** are Render environment variables, never in the repository or the image.
+
+One-time setup:
+1. Render: **New > Blueprint**, pick this GitHub repository. It reads `render.yaml`.
+2. Fill in the values it asks for: `MONGODB_URI`, `GOOGLE_CLIENT_ID`, `GEMINI_API_KEY`
+   (or another provider's key) and **`ALLOWED_EMAILS` = your Gmail address** (only these
+   accounts can sign in; without it anyone with Google could use your AI key).
+3. When it's live, copy its address (e.g. `https://matcher-xxxx.onrender.com`):
+   - Google Cloud > Credentials > your OAuth client > **Authorized JavaScript origins**: add it.
+   - MongoDB Atlas > **Network Access**: add `0.0.0.0/0` (Render has no fixed address; your
+     database user's strong password still protects it).
+4. Open the address on your phone or laptop and sign in.
+
+Run the same image on your laptop (needs Docker Desktop):
+```
+docker build -t matcher .
+docker run -p 8000:8000 --env-file backend/.env matcher
+```
 
 ## Step instructions = skills (work with every provider)
 

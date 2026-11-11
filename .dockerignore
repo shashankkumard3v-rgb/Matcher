@@ -1,0 +1,17 @@
+# Only source goes into the image: no secrets, no personal data, no local builds
+**/.env
+**/.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+backend/.venv
+backend/users
+backend/runs
+backend/logs
+backend/context
+frontend/node_modules
+frontend/dist
+samples
+*.md
+!frontend/README.md

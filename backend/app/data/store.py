@@ -5,6 +5,8 @@ Collections (database MONGODB_DB):
   notes_history  {user_id, kind, text, saved_at}               the last few versions (backups)
   resumes        {user_id, name, notes, created_at, updated_at, source, resume, text, profile,
                   profile_version, file_id}
+  run_files      {user_id, run_id, path, data, sha1, size, updated_at}  every file of every run
+                 (the run folder on disk is only a working copy, see app/data/runstore.py)
   GridFS "files" the original uploaded PDFs
 
 Synchronous on purpose: the notes are read in many places of the (synchronous) scoring and loop
@@ -50,6 +52,8 @@ class MongoDataStore:
                 self.db.notes_history.create_index([("user_id", self._asc), ("kind", self._asc),
                                                     ("saved_at", self._asc)])
                 self.db.resumes.create_index([("user_id", self._asc), ("created_at", self._asc)])
+                self.db.run_files.create_index([("user_id", self._asc), ("run_id", self._asc),
+                                                ("path", self._asc)], unique=True)
             except Exception as e:
                 from app.auth.store import _explain
                 raise DataStoreError(_explain(e)) from e
@@ -110,6 +114,33 @@ class MongoDataStore:
             self.delete_file(d["file_id"])
         return d is not None
 
+    # ----- runs (every file of every run; see app/data/runstore.py) -----
+    def run_manifest(self, user_id: str) -> dict[str, dict[str, str]]:
+        self._setup()
+        out: dict[str, dict[str, str]] = {}
+        for d in self.db.run_files.find({"user_id": user_id}, {"run_id": 1, "path": 1, "sha1": 1}):
+            out.setdefault(d["run_id"], {})[d["path"]] = d["sha1"]
+        return out
+
+    def get_run_files(self, user_id: str, run_id: str) -> list[tuple[str, bytes]]:
+        self._setup()
+        return [(d["path"], bytes(d["data"])) for d in self.db.run_files.find({"user_id": user_id, "run_id": run_id})]
+
+    def put_run_file(self, user_id: str, run_id: str, path: str, data: bytes, sha1: str) -> None:
+        self._setup()
+        from bson import Binary
+        self.db.run_files.update_one(
+            {"user_id": user_id, "run_id": run_id, "path": path},
+            {"$set": {"data": Binary(data), "sha1": sha1, "size": len(data), "updated_at": _now()}}, upsert=True)
+
+    def delete_run_file(self, user_id: str, run_id: str, path: str) -> None:
+        self._setup()
+        self.db.run_files.delete_one({"user_id": user_id, "run_id": run_id, "path": path})
+
+    def delete_run(self, user_id: str, run_id: str) -> None:
+        self._setup()
+        self.db.run_files.delete_many({"user_id": user_id, "run_id": run_id})
+
     # ----- files -----
     def put_file(self, user_id: str, name: str, data: bytes, content_type: str) -> str:
         self._setup()
@@ -150,6 +181,7 @@ class MemoryDataStore:
         self.history: list[dict] = []
         self.resumes: dict[str, dict] = {}
         self.files: dict[str, tuple[str, str, bytes, str]] = {}
+        self.run_files: dict[tuple[str, str, str], tuple[bytes, str]] = {}
 
     def get_note(self, user_id, kind):
         return self.notes.get((user_id, kind))
@@ -189,6 +221,26 @@ class MemoryDataStore:
             self.files.pop(d["file_id"], None)
         del self.resumes[rid]
         return True
+
+    def run_manifest(self, user_id):
+        out = {}
+        for (u, r, p), (_, h) in self.run_files.items():
+            if u == user_id:
+                out.setdefault(r, {})[p] = h
+        return out
+
+    def get_run_files(self, user_id, run_id):
+        return [(p, d) for (u, r, p), (d, _) in self.run_files.items() if u == user_id and r == run_id]
+
+    def put_run_file(self, user_id, run_id, path, data, sha1):
+        self.run_files[(user_id, run_id, path)] = (bytes(data), sha1)
+
+    def delete_run_file(self, user_id, run_id, path):
+        self.run_files.pop((user_id, run_id, path), None)
+
+    def delete_run(self, user_id, run_id):
+        for k in [k for k in self.run_files if k[0] == user_id and k[1] == run_id]:
+            del self.run_files[k]
 
     def put_file(self, user_id, name, data, content_type):
         fid = secrets.token_hex(12)

@@ -635,8 +635,10 @@ async def list_runs():
 @router.delete("/runs/{run_id}")
 async def delete_run(run_id: str):
     """Delete a run and everything in it (versions, exports). Can't be undone."""
+    from app.data import runstore
     try:
         runs.delete_run(run_id)
+        runstore.delete(run_id)           # and its copy in the database
     except runs.RunNotFound as e:
         raise HTTPException(404, str(e))
     except OSError as e:   # e.g. the Word file is open in Word on Windows

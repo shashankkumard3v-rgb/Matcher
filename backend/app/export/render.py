@@ -23,6 +23,10 @@ WINDOWS_SOFFICE = [
 
 
 _WORD_LOCK = threading.Lock()
+# LibreOffice: one shared profile (creating a new one for every render costs seconds, a lot on a
+# small server) and one render at a time (two copies can't share a profile).
+_LO_LOCK = threading.Lock()
+_LO_PROFILE = Path(tempfile.gettempdir()) / "matcher-libreoffice-profile"
 
 
 class RenderError(RuntimeError):
@@ -82,10 +86,10 @@ def docx_to_pdf(docx: bytes, choice: str = "auto") -> tuple[bytes, str]:
                 finally:
                     pythoncom.CoUninitialize()
         else:
-            profile = Path(tmp) / "lo-profile"
-            cmd = [_soffice(), f"-env:UserInstallation=file:///{profile.as_posix().lstrip('/')}",
+            cmd = [_soffice(), f"-env:UserInstallation=file:///{_LO_PROFILE.as_posix().lstrip('/')}",
                    "--headless", "--convert-to", "pdf", "--outdir", tmp, str(src)]
-            r = subprocess.run(cmd, capture_output=True, timeout=120)
+            with _LO_LOCK:
+                r = subprocess.run(cmd, capture_output=True, timeout=180)
             if r.returncode != 0 or not out.exists():
                 raise RenderError(f"LibreOffice failed: {r.stderr.decode(errors='ignore')[:300]}")
         return out.read_bytes(), name

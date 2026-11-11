@@ -1,0 +1,22 @@
+# Render Blueprint: Render reads this file and creates the service (New > Blueprint > pick this repo).
+# One web service from the Dockerfile: the web app and the API together.
+services:
+  - type: web
+    name: matcher
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true            # every push to the main branch deploys
+    envVars:
+      # Secrets: Render asks for these once (they are never in the repository).
+      - key: MONGODB_URI
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: ALLOWED_EMAILS     # who may sign in, e.g. you@gmail.com
+        sync: false
+      - key: GEMINI_API_KEY     # or ANTHROPIC_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY
+        sync: false
+      - key: MONGODB_DB
+        value: matcher
