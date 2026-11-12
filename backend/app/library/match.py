@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field
 from app.library.profile import ResumeProfile, capability_vocab
 from app.schemas.models import JobDescription, Resume
 from app.scoring.dates import to_month_index, total_years
-from app.scoring.synonyms import canonical, count_mentions
+from app.scoring.synonyms import (alternatives, canonical, close_credit, close_to, count_mentions, needed_count,
+                                   shown_by)
 
 WEIGHTS = {"required": 55, "nice": 10, "capabilities": 20, "years": 8, "title": 7}
 _TITLE_STOP = {"senior", "sr", "junior", "jr", "lead", "principal", "staff", "ii", "iii", "iv", "i",
@@ -55,20 +56,49 @@ def _recency(last_used: str | None, today: date) -> float:
     return 1.0 if years_ago <= 1 else 0.9 if years_ago <= 2 else 0.75 if years_ago <= 4 else 0.6
 
 
-def _fit(jd_skill: str, profile: ResumeProfile, today: date) -> SkillFit:
-    """The best skill in the profile for this JD requirement ("Kafka or similar" matches Kafka)."""
-    best = SkillFit(jd_skill=jd_skill)
-    want = canonical(jd_skill).lower()
+def _fit_one(skill: str, profile: ResumeProfile, today: date) -> SkillFit:
+    """The best saved-resume skill for ONE skill: the same skill, one that shows it
+    (TypeScript shows JavaScript), or a close one (Java for Kotlin) at part of the credit."""
+    best = SkillFit(jd_skill=skill)
+    want = canonical(skill).lower()
+    via = {canonical(x).lower() for x in shown_by(skill)}
+    near = {canonical(x).lower() for x in close_to(skill)}
     for s in profile.skills:
-        if s.name.lower() == want or count_mentions(s.name, jd_skill) or count_mentions(jd_skill, s.name):
-            credit = s.level / 5 * _recency(s.last_used, today)
-            if credit > best.credit:
-                note = ("only listed" if s.level == 1 else
-                        f"level {s.level}/5" + ("" if s.last_used in (None, "present") else f", last used {s.last_used}"))
-                best = SkillFit(jd_skill=jd_skill, matched=s.name, level=s.level, credit=round(credit, 3), note=note)
+        n = s.name.lower()
+        if n == want or n in via or count_mentions(s.name, skill) or count_mentions(skill, s.name):
+            factor, how = 1.0, ""
+        elif n in near:
+            factor, how = close_credit(), "close, not the same; "
+        else:
+            continue
+        credit = s.level / 5 * _recency(s.last_used, today) * factor
+        if credit > best.credit:
+            note = how + ("only listed" if s.level == 1 else
+                          f"level {s.level}/5" + ("" if s.last_used in (None, "present") else f", last used {s.last_used}"))
+            best = SkillFit(jd_skill=skill, matched=s.name, level=s.level, credit=round(credit, 3), note=note)
     if best.matched is None:
         best.note = "missing"
     return best
+
+
+def _fit(jd_skill: str, profile: ResumeProfile, today: date) -> SkillFit:
+    """A JD requirement: one skill, ANY ONE of several ("Java or Go or C++"), or N of them
+    ("2 of Java or Go or C++": the best two count, averaged)."""
+    opts = alternatives(jd_skill)
+    if len(opts) == 1:
+        f = _fit_one(opts[0], profile, today)
+        f.jd_skill = jd_skill
+        return f
+    need = min(needed_count(jd_skill), len(opts))
+    fits = sorted((_fit_one(o, profile, today) for o in opts), key=lambda f: -f.credit)[:need]
+    shown = [f for f in fits if f.matched]
+    if not shown:
+        return SkillFit(jd_skill=jd_skill, note="missing (any one is enough)" if need == 1 else f"missing ({need} needed)")
+    credit = round(sum(f.credit for f in fits) / need, 3)
+    note = fits[0].note if need == 1 else f"{len(shown)} of {need} needed: " + ", ".join(
+        f"{f.matched} {f.level}/5" for f in shown)
+    return SkillFit(jd_skill=jd_skill, matched=" + ".join(f.matched for f in shown), level=min(f.level for f in shown),
+                    credit=credit, note=note)
 
 
 def _resume_years(resume: Resume, today: date) -> float:

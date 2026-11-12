@@ -32,9 +32,10 @@ def test_full_interactive_flow(tmp_workspace, resume_pdf, jd_docx):
     assert [k["id"] for k in g["knockouts"]] == ["missing_must_haves"]
     ids = [x["id"] for x in g["questions"]]
     assert ids[:2] == ["skill:kafka", "skill:kubernetes"]           # knockout questions first
-    assert {"listed:python", "listed:postgresql"} <= set(ids)
-    assert g["ceiling_score"] == g["current_score"] == 48.5           # empty template
-    assert g["explanation"]["points_below_floor"] == 16.5
+    assert "listed:postgresql" in ids
+    assert "listed:python" not in ids          # a Django bullet already shows Python (skill_relations.yaml)
+    assert g["ceiling_score"] == g["current_score"] == 51.6           # empty template
+    assert g["explanation"]["points_below_floor"] == 13.4
     assert g["explanation"]["missing_must_haves"] == ["Kafka", "Kubernetes"]
     assert g["explanation"]["top_losses"][0]["to_gain"]
 
@@ -73,7 +74,7 @@ def test_full_interactive_flow(tmp_workspace, resume_pdf, jd_docx):
 
     # The original resume's score file was never touched by any of this
     run_dir = tmp_workspace / "runs" / run
-    assert json.loads((run_dir / "score_0.json").read_text())["total"] == 48.5
+    assert json.loads((run_dir / "score_0.json").read_text())["total"] == 51.6
 
 
 def test_language_question_and_knockout(tmp_workspace, resume_pdf, jd_docx):
@@ -112,10 +113,10 @@ def test_no_answer_and_skip(tmp_workspace, resume_pdf, jd_docx):
     g = c.post(f"/api/runs/{run}/gate/answer",
                json={"question_id": "skill:kubernetes", "answer": "No, never used it"}).json()
     assert q(g, "skill:kubernetes")["status"] == "answered" and g["proposals"] == []
-    g = c.post(f"/api/runs/{run}/gate/skip/listed:python").json()
-    assert q(g, "listed:python")["status"] == "skipped"
+    g = c.post(f"/api/runs/{run}/gate/skip/listed:postgresql").json()
+    assert q(g, "listed:postgresql")["status"] == "skipped"
     g = c.post(f"/api/runs/{run}/gate").json()          # answers survive a recompute
-    assert q(g, "listed:python")["status"] == "skipped"
+    assert q(g, "listed:postgresql")["status"] == "skipped"
 
 
 def test_unsaid_numbers_are_removed(tmp_workspace, resume_pdf, jd_docx):

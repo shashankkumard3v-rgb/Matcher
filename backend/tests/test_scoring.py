@@ -35,12 +35,13 @@ async def test_deterministic_points_are_exact():
     w, sc = cfg()
     dims, must, nice, years, warns = score_deterministic(r, jd, w, sc, set(), TODAY)
     d = {x.key: x.points for x in dims}
-    # Python only in summary/skills (0.5: a summary isn't proof), PostgreSQL only listed
-    # (0.5), Kafka + Kubernetes missing
+    # Python: no bullet says "Python", but one says Django, and Django work shows Python
+    # (config/skill_relations.yaml). PostgreSQL only listed (0.5), Kafka + Kubernetes missing
     assert [(h.skill, h.status) for h in must] == [
-        ("Python", "listed_only"), ("Kafka", "missing"),
+        ("Python", "evidenced"), ("Kafka", "missing"),
         ("PostgreSQL", "listed_only"), ("Kubernetes", "missing")]
-    assert d["must_have_coverage"] == 6.25          # 25 * 1.0/4
+    assert "through Django" in must[0].note
+    assert d["must_have_coverage"] == 9.38          # 25 * 1.5/4
     assert d["nice_to_have_coverage"] == 0          # Go, Terraform missing
     assert d["title_alignment"] == 4                # "Software Engineer" covers engineer of backend+engineer
     assert years == 7.5 and d["years_fit"] == 7     # 2019-06..2021-03 + 2021-04..2026-11
@@ -131,7 +132,7 @@ async def test_same_resume_same_score_every_time():
     llm = FakeLLM()
     first = await score_resume(llm, r, jd, today=TODAY)
     again = await score_resume(llm, r, jd, pins=first.pins, today=TODAY)
-    assert first.total == again.total == 48.5  # 22.25 deterministic + 26.25 judgment
+    assert first.total == again.total == 51.6  # 25.38 deterministic + 26.25 judgment
     assert first.llm_points == 26.25
     assert first.top_losses[0] == "must_have_coverage"
     assert again.pins == first.pins

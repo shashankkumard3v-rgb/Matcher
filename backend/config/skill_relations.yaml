@@ -1,0 +1,55 @@
+# How skills relate, so a JD's requirement is judged fairly.
+#
+# implies: knowing the skill on the left SHOWS the skills on the right (full credit).
+#   e.g. JD asks for JavaScript, your bullet says TypeScript -> JavaScript counts as shown.
+#   It only works this way round: knowing JavaScript does NOT show TypeScript or Node.js.
+#
+# close: the JD asks for the skill on the left, your resume shows one on the right instead.
+#   Not the same thing, so it earns part of the credit ("close_credit") and Matcher asks you
+#   whether you have the real one. Leave a skill out if you think it shouldn't count at all.
+#
+# Not part of the pinned scoring settings: edits apply to new scores right away.
+
+implies:
+  TypeScript: [JavaScript]
+  Node.js: [JavaScript]
+  Express: [Node.js, JavaScript]
+  NestJS: [Node.js, TypeScript, JavaScript]
+  React: [JavaScript]
+  Next.js: [React, JavaScript]
+  Angular: [TypeScript, JavaScript]
+  Vue: [JavaScript]
+  Django: [Python]
+  Flask: [Python]
+  FastAPI: [Python]
+  PyTorch: [Python]
+  Spring Boot: [Spring, Java]
+  Spring: [Java]
+  PostgreSQL: [SQL]
+  MySQL: [SQL]
+  Kubernetes: [Docker]
+
+close_credit: 0.5
+close:
+  TypeScript: [JavaScript]      # JS developers pick up TS quickly, but it isn't shown
+  Node.js: [JavaScript]
+  Kotlin: [Java]
+  Java: [Kotlin]
+  C: [C++]
+  C++: [C]
+  GCP: [AWS, Azure]             # another cloud
+  AWS: [GCP, Azure]
+  Azure: [AWS, GCP]
+  MySQL: [PostgreSQL]
+  PostgreSQL: [MySQL]
+
+# Programming languages. In a JD, "Java/Go/C++" (slashes between languages) means ANY ONE of
+# them; a slash between other things ("Node.js/TypeScript", "Docker/Kubernetes") means BOTH.
+languages: [Java, Go, C++, C#, C, Python, Ruby, Rust, Kotlin, Scala, PHP, JavaScript, TypeScript,
+            Swift, Objective-C, Dart, Elixir, Erlang, Haskell, Clojure, Perl, R, Julia, Lua]
+
+# Extra spellings (added to config/skills_synonyms.yaml's list). "exact" ones only count with
+# this capitalization ("Node" the runtime, not "a graph node").
+aliases:
+  Node.js: [Node]
+exact: [Node]

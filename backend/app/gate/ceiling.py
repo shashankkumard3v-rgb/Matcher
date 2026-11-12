@@ -68,8 +68,11 @@ def _over_limit(r: Resume, jd: JobDescription, max_mentions: int) -> set[str]:
     """JD skills mentioned more often than the scorer allows (keyword stuffing)."""
     from app.scoring.render import evidence_text, skills_text
     from app.scoring.synonyms import count_mentions
+    from app.scoring.synonyms import alternatives
     ev, listed = evidence_text(r), skills_text(r)
-    return {s for s in _jd_skills(jd) if count_mentions(s, ev) + count_mentions(s, listed) > max_mentions}
+    # "Java or Go or C++": each option is judged on its own (Java 3x + Go 2x isn't stuffing)
+    return {s for s in _jd_skills(jd)
+            if any(count_mentions(a, ev) + count_mentions(a, listed) > max_mentions for a in alternatives(s))}
 
 
 def _select(r: Resume, pools: list[list[str]], caps: list[int], jd: JobDescription,
@@ -169,11 +172,17 @@ def build_ceiling_resume(resume: Resume, ctx: ProjectContext, jd: JobDescription
         from app.scoring.render import evidence_text, skills_text
         have = {canonical(x).lower() for x in r.skills}
         shown = evidence_text(r) + "\n" + skills_text(r)
+        from app.scoring.synonyms import alternatives
+        lines = [line for h, line in notes.entries(skills_raw) if h != line]
         for s in _jd_skills(jd):
-            if canonical(s).lower() not in have and not count_mentions(s, shown) and any(
-                    count_mentions(s, line) for h, line in notes.entries(skills_raw) if h != line):
-                r.skills.append(canonical(s))
-                have.add(canonical(s).lower())
+            if count_mentions(s, shown):
+                continue
+            # "Java or Go or C++": add only the option your notes actually mention (one is enough)
+            for opt in alternatives(s):
+                if canonical(opt).lower() not in have and any(count_mentions(opt, line) for line in lines):
+                    r.skills.append(canonical(opt))
+                    have.add(canonical(opt).lower())
+                    break
 
     pools = [_dedupe(pool, jd) for pool in pools]
     seen = [b for pool in pools for b in pool]

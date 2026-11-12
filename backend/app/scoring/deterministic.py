@@ -7,7 +7,7 @@ from datetime import date
 from app.schemas.models import JobDescription, Resume, ScoreDimension, SkillHit
 from app.scoring.dates import total_years
 from app.scoring.render import evidence_text, skills_text
-from app.scoring.synonyms import canonical, count_mentions
+from app.scoring.synonyms import alternatives, canonical, close_credit, close_to, count_mentions, needed_count, shown_by
 
 SENIORITY_WORDS = {
     "senior", "sr", "junior", "jr", "lead", "principal", "staff", "associate", "intern",
@@ -28,7 +28,32 @@ def _round(x: float) -> float:
 
 # ---------- skills coverage ----------
 
+def _option(skill: str, ev: str, listed: str, list_only: float) -> tuple[float, str, int, str | None]:
+    """How well the resume shows ONE skill -> (credit, status, mentions, through which skill).
+    In a bullet > shown through a skill that implies it (TypeScript shows JavaScript) > only in
+    the Skills list > a close skill (JavaScript when TypeScript is asked) > missing."""
+    in_ev, in_list = count_mentions(skill, ev), count_mentions(skill, listed)
+    if in_ev:
+        return 1.0, "evidenced", in_ev + in_list, None
+    for other in shown_by(skill):
+        if count_mentions(other, ev):
+            return 1.0, "evidenced", count_mentions(other, ev), other
+    if in_list:
+        return list_only, "listed_only", in_list, None
+    for other in shown_by(skill):
+        if count_mentions(other, listed):
+            return list_only, "listed_only", count_mentions(other, listed), other
+    for other in close_to(skill):
+        n = count_mentions(other, ev) + count_mentions(other, listed)
+        if n:
+            return close_credit() * (1.0 if count_mentions(other, ev) else list_only), "close", n, other
+    return 0.0, "missing", 0, None
+
+
 def skill_hits(skills: list[str], resume: Resume, cfg: dict) -> list[SkillHit]:
+    """One result per JD requirement. A requirement is a single skill ("Go": only Go counts),
+    or "any one of" ("Java or Go or C++"), or "N of" ("2 of Java or Go or C++"). Needing ALL of
+    several skills is written as separate requirements, each scored on its own."""
     ev, listed = evidence_text(resume), skills_text(resume)
     list_only = float(cfg.get("list_only_credit", 0.5))
     max_mentions = int(cfg.get("stuffing_max_mentions", 4))
@@ -39,19 +64,57 @@ def skill_hits(skills: list[str], resume: Resume, cfg: dict) -> list[SkillHit]:
         if name.lower() in seen:
             continue
         seen.add(name.lower())
-        in_ev, in_list = count_mentions(name, ev), count_mentions(name, listed)
-        if in_ev:
-            credit, status, note = 1.0, "evidenced", None
-        elif in_list:
-            credit, status = list_only, "listed_only"
-            note = "Only in the Skills list; no bullet shows it being used."
+        opts = alternatives(name)
+        need = min(needed_count(name), len(opts))
+        scored = sorted(((*_option(o, ev, listed, list_only), o) for o in opts), key=lambda x: -x[0])
+        top = scored[:need]
+        credit = sum(x[0] for x in top) / need
+        mentions = max(x[2] for x in top)                  # stuffing is judged per skill
+        shown = [x[4] if not x[3] else f"{x[4]} (through {x[3]})" for x in top if x[0] > 0]
+        if credit >= 1.0:
+            status = "evidenced"
+        elif credit == 0:
+            status = "missing"
+        elif need == 1:
+            status = top[0][1]                            # listed_only | close
         else:
-            credit, status, note = 0.0, "missing", None
-        total = in_ev + in_list
-        if total > max_mentions:
+            status = "partial"
+
+        note = None
+        best = top[0]
+        if len(opts) == 1:
+            if status == "listed_only":
+                note = "Only in the Skills list; no bullet shows it being used."
+                if best[3]:
+                    note = f"Only {best[3]} is listed (it counts as {name}); no bullet shows it."
+            elif status == "evidenced" and best[3]:
+                note = f"Shown through {best[3]} (using {best[3]} shows {name})."
+            elif status == "close":
+                note = (f"Not on your resume; {best[3]} is close but not the same, so it earns part "
+                        f"of the credit.")
+        elif need == 1:
+            if status == "missing":
+                note = "The job accepts any ONE of these. You don't need all of them."
+            else:
+                note = f"Any one of these is enough; your resume shows {shown[0]}."
+                if status == "listed_only":
+                    note += " It's only in the Skills list."
+                elif status == "close":
+                    note += " That's close, not the same, so it earns part of the credit."
+        else:
+            have = ", ".join(shown) if shown else "none of them"
+            note = f"The job wants {need} of these; your resume shows {have}."
+        if mentions > max_mentions:
             credit *= stuffed_credit
-            note = f"Mentioned {total} times (more than {max_mentions}): looks like keyword stuffing."
-        hits.append(SkillHit(skill=name, status=status, credit=_round(credit), mentions=total, note=note))
+            note = f"Mentioned {mentions} times (more than {max_mentions}): looks like keyword stuffing."
+        if len(opts) == 1:
+            matched = best[3] if best[0] > 0 else None        # the related skill that counted, if any
+        elif need == 1:
+            matched = (best[3] or best[4]) if best[0] > 0 else None
+        else:
+            matched = " + ".join(x[4] for x in top if x[0] > 0) or None
+        hits.append(SkillHit(skill=name, status=status, credit=_round(credit), mentions=mentions, note=note,
+                             matched=matched))
     return hits
 
 

@@ -97,4 +97,39 @@ async def structure_jd(llm: LLMClient, text: str) -> tuple[JobDescription, list[
     except ValidationError as e:
         raise LLMError(f"JD JSON did not match the schema: {e}") from e
     jd.capabilities = list(dict.fromkeys(c for c in jd.capabilities if c in vocab))[:8]  # only known ids
+    jd.must_have = normalize_one_of(jd.must_have)
+    jd.nice_to_have = normalize_one_of(jd.nice_to_have)
     return jd, verify_jd(jd)
+
+
+def normalize_one_of(skills: list[str]) -> list[str]:
+    """Writes every "any one of" requirement the same way ("Java or Go or C++") so scoring
+    counts it as met by any one option. "Java/Go/C++" (slashes) counts too when every part is a
+    known skill and the whole isn't one name itself (CI/CD, TCP/IP stay as they are)."""
+    from app.scoring.synonyms import alternatives, canonical, is_language, needed_count, synonym_table
+    known = synonym_table()[1]
+    out = []
+    for raw in skills:
+        s = (raw or "").strip()
+        parts = [p for p in s.split("/") if p]
+        if len(parts) > 1 and " " not in s and _norm(s) not in known and all(_norm(p) in known for p in parts):
+            if all(is_language(p) for p in parts):
+                s = " or ".join(parts)               # "Java/Go/C++": any one language
+            else:
+                out += parts                         # "Node.js/TypeScript": both
+                continue
+        need = needed_count(s)
+        alts = alternatives(s)
+        if len(alts) > 1:
+            out.append((f"{need} of " if need > 1 else "") + " or ".join(alts))
+        elif "," in s and not re.search(r"\bor\b", s, re.IGNORECASE):
+            out += [p.strip() for p in s.split(",") if p.strip()]     # "Python, SQL": both required
+        else:
+            out.append(alts[0])
+    seen, unique = set(), []
+    for s in out:
+        k = canonical(s).lower()
+        if s and k not in seen:
+            seen.add(k)
+            unique.append(s)
+    return unique

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
-import { go } from "./nav.js";
+import { go, skillLabel } from "./nav.js";
 import { bump, get as storeGet, track, useChanged, useKept } from "./store.js";
 import { confirmDelete } from "./RunsList.jsx";
 import Improve from "./Improve.jsx";
@@ -58,12 +58,12 @@ function JdCard({ jd }) {
       </div>
       <div className="small strong">Required</div>
       <div className="chips">
-        {jd.must_have.length ? jd.must_have.map((s) => <Chip key={s}>{s}</Chip>) : <span className="muted">none found</span>}
+        {jd.must_have.length ? jd.must_have.map((s) => <Chip key={s}>{skillLabel(s)}</Chip>) : <span className="muted">none found</span>}
       </div>
       {jd.nice_to_have.length > 0 && (
         <>
           <div className="small strong">Nice to have</div>
-          <div className="chips">{jd.nice_to_have.map((s) => <Chip key={s} kind="soft">{s}</Chip>)}</div>
+          <div className="chips">{jd.nice_to_have.map((s) => <Chip key={s} kind="soft">{skillLabel(s)}</Chip>)}</div>
         </>
       )}
       {jd.languages?.length > 0 && (
@@ -116,7 +116,8 @@ function ScoreRing({ value, floor, target }) {
 }
 
 function hitKind(status) {
-  return status === "evidenced" ? "good" : status === "listed_only" ? "warn" : "bad";
+  // close = a related skill instead (JavaScript for TypeScript); partial = some of "N of"
+  return status === "evidenced" ? "good" : ["listed_only", "close", "partial"].includes(status) ? "warn" : "bad";
 }
 
 const r1 = (x) => Math.round(x * 10) / 10;
@@ -174,11 +175,11 @@ function ScoreCard({ score, children }) {
       <div className="small strong">Required skills</div>
       <div className="chips">
         {score.must_have.map((h) => (
-          <Chip key={h.skill} kind={hitKind(h.status)}>{h.skill}</Chip>
+          <Chip key={h.skill} kind={hitKind(h.status)}>{skillLabel(h.skill, h.matched)}</Chip>
         ))}
       </div>
       <div className="legend small muted">
-        <Chip kind="good">shown in a bullet</Chip> <Chip kind="warn">only listed</Chip> <Chip kind="bad">missing</Chip>
+        <Chip kind="good">shown in a bullet</Chip> <Chip kind="warn">only listed / close / partly</Chip> <Chip kind="bad">missing</Chip>
       </div>
 
       <div className="dims">

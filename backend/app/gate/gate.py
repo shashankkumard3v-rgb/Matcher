@@ -36,6 +36,7 @@ from app.schemas.models import (
     ScoreResult,
 )
 from app.scoring.scorer import score_resume
+from app.scoring.synonyms import alternatives, needed_count
 
 APPLY, RISK, DONT, OVERRIDDEN = "APPLY", "APPLY_WITH_RISK", "DONT_APPLY", "OVERRIDDEN"
 NEXT_LEVEL = {0: 25, 25: 50, 50: 75, 75: 100}
@@ -97,19 +98,45 @@ def make_questions(current: ScoreResult, ceiling: ScoreResult, jd: JobDescriptio
     ko_ids = {k.id for k in knockouts}
     for h in ceiling.must_have:
         if h.status == "missing":
+            opts = alternatives(h.skill)
+            text = (f"The JD requires {h.skill}, and neither your resume nor your My info notes "
+                    f"mentions it. Have you used it? If yes, where and what did you do?")
+            if len(opts) > 1:      # "Java or Go or C++": one is enough, never ask for all of them
+                text = (f"The JD needs ONE of these: {', '.join(opts[:-1])} or {opts[-1]} (any one is "
+                        "enough, you don't need all). Neither your resume nor your My info notes shows "
+                        "any of them. Have you used one? If yes, which one, where and what did you do?")
             qs.append(GateQuestion(
                 id=f"skill:{_norm(h.skill)}", kind="missing_skill",
-                text=(f"The JD requires {h.skill}, and neither your resume nor your My info notes "
-                      f"mentions it. Have you used it? If yes, where and what did you do?"),
+                text=text,
                 why=f"Worth up to {per_skill:.1f} points"
                     + (" and it's part of a knockout." if "missing_must_haves" in ko_ids else "."),
                 points_at_stake=round(per_skill + (100 if "missing_must_haves" in ko_ids else 0), 2)))
+        elif h.status == "close":
+            gain = per_skill * (1 - h.credit)
+            asked = alternatives(h.skill)
+            want = asked[0] if len(asked) == 1 else " or ".join(asked)
+            qs.append(GateQuestion(
+                id=f"close:{_norm(h.skill)}", kind="missing_skill",
+                text=(f"The JD asks for {want}; your resume shows {h.matched or 'something close'}, which is "
+                      f"related but not the same. Have you used {want} itself? If yes, where and what did you do?"),
+                why=f"Showing {want} itself is worth about {gain:.1f} more points.",
+                points_at_stake=round(gain, 2)))
+        elif h.status == "partial":
+            gain = per_skill * (1 - h.credit)
+            opts = alternatives(h.skill)
+            qs.append(GateQuestion(
+                id=f"partial:{_norm(h.skill)}", kind="missing_skill",
+                text=(f"The JD wants {needed_count(h.skill)} of these: {', '.join(opts)}. Your resume shows "
+                      f"{h.matched or 'fewer'}. Have you used another one of them? If yes, which, where and what did you do?"),
+                why=f"Worth about {gain:.1f} more points.",
+                points_at_stake=round(gain, 2)))
         elif h.status == "listed_only":
             gain = per_skill * (1 - h.credit)
+            shown = h.matched or h.skill   # "Java or Go or C++": name the one you have, not the list
             qs.append(GateQuestion(
                 id=f"listed:{_norm(h.skill)}", kind="listed_only",
-                text=(f"{h.skill} is only listed, and no bullet shows you using it. What did you "
-                      f"build or do with {h.skill}, and at which job?"),
+                text=(f"{shown} is only listed, and no bullet shows you using it. What did you "
+                      f"build or do with {shown}, and at which job?"),
                 why=f"Showing it in a bullet is worth about {gain:.1f} more points.",
                 points_at_stake=round(gain, 2)))
     if "years_short" in ko_ids or (jd.years_required and (ceiling.years_found or 0) < jd.years_required):
@@ -139,6 +166,7 @@ def _to_gain(d, ceiling: ScoreResult, jd: JobDescription) -> str:
         hits = ceiling.must_have if d.key == "must_have_coverage" else ceiling.nice_to_have
         missing = [h.skill for h in hits if h.status == "missing"]
         listed = [h.skill for h in hits if h.status == "listed_only"]
+        missing += [h.skill for h in hits if h.status in ("close", "partial")]
         parts = []
         if missing:
             parts.append("real experience with " + ", ".join(missing))

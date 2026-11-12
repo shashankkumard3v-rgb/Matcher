@@ -133,6 +133,7 @@ class SkillHit(BaseModel):
     credit: float  # 0..1 share of that skill's points earned
     mentions: int = 0
     note: Optional[str] = None
+    matched: Optional[str] = None  # for "Java or Go or C++": the one your resume shows
 
 
 class ScoreDimension(BaseModel):

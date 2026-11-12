@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { get as storeGet, track, useChanged, useKept } from "./store.js";
-import { go } from "./nav.js";
+import { go, skillLabel } from "./nav.js";
 import { LevelDots, ResumeUploader } from "./MyResumes.jsx";
 
 const MIN_JD_CHARS = 80;
@@ -24,7 +24,7 @@ function useElapsed(startedAt) {   // seconds since the step started (kept acros
 function SkillRow({ f }) {
   return (
     <li>
-      <span className="skill-name">{f.jd_skill}</span>
+      <span className="skill-name" title={f.jd_skill}>{skillLabel(f.jd_skill)}</span>
       {f.matched ? <LevelDots level={f.level} /> : <span className="chip chip-bad">missing</span>}
       <span className="small muted">
         {f.matched && f.matched.toLowerCase() !== f.jd_skill.toLowerCase() ? `${f.matched} · ` : ""}
