@@ -15,10 +15,8 @@ from app.schemas.models import JobDescription, ProjectContext, Resume, ResumePro
 
 
 def _same_company(a: str | None, b: str | None) -> bool:
-    if not a or not b:
-        return False
-    x, y = _norm(a), _norm(b)
-    return x == y or x in y or y in x
+    from app.parsing.structure import company_matches
+    return company_matches(a, b)
 
 
 _LABEL = re.compile(r"^(role|dates?|location|team|product)\s*:", re.IGNORECASE)
@@ -30,6 +28,16 @@ _TOKEN = re.compile(r"[a-z0-9][a-z0-9+#.]*")
 
 def _tokens(text: str) -> set[str]:
     return {t for t in _TOKEN.findall(_norm(text)) if len(t) > 2}
+
+
+def _note_is_for(company: str, head: str | None, line: str) -> bool:
+    """A notes line belongs to a job when it sits under that company's heading or names it."""
+    from app.parsing.structure import company_matches, mentions_company
+    if head and head != line:
+        h = re.sub(r"^\s*(company|employer|section)\s*[:\-]\s*", "", head, flags=re.IGNORECASE)
+        if company_matches(company, h):
+            return True
+    return mentions_company(company, line)
 
 
 def near_duplicate(a: str, b: str, threshold: float = 0.6) -> bool:
@@ -158,7 +166,7 @@ def build_ceiling_resume(resume: Resume, ctx: ProjectContext, jd: JobDescription
         if head == line or _LABEL.match(line) or _SKILL_ENTRY.search(line):
             continue
         where = f"{head} | {line}" if head else line
-        i = next((k for k, j in enumerate(r.experience) if j.company and _norm(j.company) in _norm(where)), None)
+        i = next((k for k, j in enumerate(r.experience) if j.company and _note_is_for(j.company, head, line)), None)
         if i is not None:
             pools[i].append(line)
         else:

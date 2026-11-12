@@ -64,3 +64,41 @@ def test_right_aligned_dates_are_not_two_columns():
     c.save()
     x = extract_file("cv.pdf", buf.getvalue(), ALLOWED_RESUME_TYPES)
     assert not any(code == "two_column_layout" for code, _ in x.warnings)
+
+
+def _no_space_pdf(size: float, gap_em: float) -> bytes:
+    """A PDF like LaTeX/Canva make: each word placed on its own, no space characters at all."""
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    from reportlab.pdfgen import canvas
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    y = 780
+    for line in ["Designed and built REST APIs in FastAPI for settlements and payouts at Acme Corp.",
+                 "Led 3 technical design reviews and mentored 2 junior engineers on the payments team."] * 6:
+        x = 60
+        for w in line.split(" "):
+            c.setFont("Helvetica", size)
+            c.drawString(x, y, w)
+            x += stringWidth(w, "Helvetica", size) + gap_em * size
+        y -= size * 1.5
+    c.save()
+    return buf.getvalue()
+
+
+def test_words_keep_their_spaces_when_the_pdf_has_no_space_characters():
+    from app.parsing.extract import extract_pdf
+    for size, gap in ((10, 0.25), (9, 0.18), (11, 0.22), (8, 0.2)):
+        text = extract_pdf(_no_space_pdf(size, gap)).text
+        assert text.splitlines()[0] == "Designed and built REST APIs in FastAPI for settlements and payouts at Acme Corp.", size
+        assert "Designedandbuilt" not in text
+
+
+def test_pdfs_with_real_spaces_read_exactly_as_before(resume_pdf):
+    import io
+    import pdfplumber
+    from app.parsing.extract import extract_pdf
+    with pdfplumber.open(io.BytesIO(resume_pdf)) as pdf:
+        before = "\n".join(p.extract_text() or "" for p in pdf.pages)
+    assert extract_pdf(resume_pdf).text.split() == before.split()

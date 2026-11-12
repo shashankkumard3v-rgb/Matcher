@@ -83,8 +83,16 @@ def test_context_roundtrip_and_employer_check(tmp_workspace, resume_pdf, jd_docx
         "resume": ("cv.pdf", resume_pdf, "application/pdf"),
         "jd": ("jd.docx", jd_docx, "application/octet-stream"),
     })
+    # a saved answer for a job this resume doesn't have is just not used here: no warning
     w = [x for x in r.json()["warnings"] if x["code"] == "employer_not_on_resume"]
-    assert len(w) == 1 and "Startup Z" in w[0]["message"]
+    assert not any("Startup Z" in x["message"] for x in w)
+
+    # and you can remove it (My info -> Saved answers)
+    ids = [p["id"] for p in c.get("/api/context").json()["parsed"]["projects"]]
+    gone = c.delete(f"/api/context/projects/{ids[-1]}")
+    assert gone.status_code == 200 and "Startup Z" not in gone.json()["text"]
+    assert [p["id"] for p in gone.json()["parsed"]["projects"]] == ids[:-1]
+    assert c.delete(f"/api/context/projects/{ids[-1]}").status_code == 404
 
 
 def test_score_endpoint_pins_and_numbers_files(tmp_workspace, resume_pdf, jd_docx):

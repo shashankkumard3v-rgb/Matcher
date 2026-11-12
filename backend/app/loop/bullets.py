@@ -152,6 +152,9 @@ def _origins(state: LoopState | None) -> dict[str, tuple[str, str | None]]:
     return out
 
 
+from app.gate.ceiling import _note_is_for  # noqa: E402  (one rule for "which job is this note about")
+
+
 def candidates(resume: Resume, jd: JobDescription, per_job: int = 12) -> list[Candidate]:
     """Best facts from your experience notes for each job (by company), not on the resume yet.
     These are the building blocks the AI can combine into stronger bullets."""
@@ -160,15 +163,13 @@ def candidates(resume: Resume, jd: JobDescription, per_job: int = 12) -> list[Ca
     pairs = notes.entries(notes.read_raw("experience"))
     out: list[Candidate] = []
     for j, job in enumerate(resume.experience):
-        comp = _norm(job.company or "")
-        if not comp:
+        if not job.company:
             continue
         found = []
         for head, line in pairs:
             if head == line or len(line.split()) < 4:
                 continue
-            where = _norm(f"{head or ''} {line}")
-            if comp not in where or _norm(line) in have:
+            if not _note_is_for(job.company, head, line) or _norm(line) in have:
                 continue
             if re.match(r"^(role|dates?|location|team|product)\s*:", line, re.IGNORECASE):
                 continue
@@ -185,15 +186,14 @@ def _content_words(text: str) -> set[str]:
 
 def related_notes(bullet: str, company: str | None, pairs: list[tuple]) -> list[str]:
     """Notes lines for the same company that talk about the same work as this bullet."""
-    comp = _norm(company or "")
     bw = _content_words(bullet)
-    if not comp or not bw:
+    if not company or not bw:
         return []
     out = []
     for head, line in pairs:
         if head == line or _norm(line) == _norm(bullet):
             continue
-        if comp not in _norm(f"{head or ''} {line}"):
+        if not _note_is_for(company, head, line):
             continue
         shared = bw & _content_words(line)
         if len(shared) >= 2 or (shared and len(shared) / len(bw) >= 0.4):

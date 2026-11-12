@@ -30,7 +30,8 @@ def _ok(i, label, detail=""):
 
 def pdf_text(pdf: bytes) -> tuple[str, int]:
     with pdfplumber.open(io.BytesIO(pdf)) as doc:
-        return "\n".join(p.extract_text() or "" for p in doc.pages), len(doc.pages)
+        from app.parsing.extract import page_text      # same reader as uploads (keeps word spaces)
+        return "\n".join(page_text(p) for p in doc.pages), len(doc.pages)
 
 
 def check(docx_bytes: bytes, pdf_bytes: bytes, resume: Resume, spec: dict, look: dict,

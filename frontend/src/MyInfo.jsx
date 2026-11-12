@@ -6,7 +6,54 @@ const TABS = [
   { id: "resumes", label: "Resumes" },
   { id: "experience", label: "Experience", file: "experience.txt" },
   { id: "skills", label: "Skills", file: "skills.txt" },
+  { id: "answers", label: "Saved answers" },
 ];
+
+// Answers you gave during runs, kept as projects. A project is only used for a resume that has
+// its company; here you can see them all and remove ones you don't want (e.g. test data).
+function SavedAnswers() {
+  const [ctx, setCtx] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(null);
+  useEffect(() => { api.context().then((r) => setCtx(r.parsed)).catch((e) => setError(e.message)); }, []);
+
+  async function remove(p) {
+    if (!window.confirm(`Remove "${p.name}"${p.employer ? ` (${p.employer})` : ""}? Matcher won't use it again.`)) return;
+    setBusy(p.id); setError(null);
+    try { setCtx((await api.deleteSavedAnswer(p.id)).parsed); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(null); }
+  }
+
+  if (error && !ctx) return <div className="alert alert-bad">{error}</div>;
+  if (!ctx) return <div className="muted small">Loading…</div>;
+  return (
+    <div className="stack-sm">
+      <p className="small muted">
+        Answers you gave the AI during runs, saved as projects. Each one is used only for a resume that has the
+        same company. Remove any you don't want Matcher to use.
+      </p>
+      {error && <div className="alert alert-bad small">{error}</div>}
+      {ctx.projects.length === 0 && <div className="muted small">No saved answers.</div>}
+      {ctx.projects.map((p) => (
+        <div key={p.id} className="card card-flat stack-sm">
+          <div className="strong">{p.name}</div>
+          <div className="small muted">
+            {[p.employer, p.role, [p.start, p.end].filter(Boolean).join(" – ")].filter(Boolean).join(" · ") || "No company given"}
+          </div>
+          {p.what_i_did?.length > 0 && (
+            <ul className="small">{p.what_i_did.slice(0, 4).map((x, i) => <li key={i}>{x}</li>)}</ul>
+          )}
+          <div>
+            <button className="btn btn-sm btn-danger" disabled={!!busy} onClick={() => remove(p)}>
+              {busy === p.id ? "Removing…" : "Remove"}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const HELP = {
   experience:
@@ -154,7 +201,9 @@ export default function MyInfo({ tab }) {
           </a>
         ))}
       </div>
-      {current.id === "resumes" ? <MyResumes /> : (
+      {current.id === "resumes" ? <MyResumes /> : current.id === "answers" ? (
+        <div className="card"><SavedAnswers /></div>
+      ) : (
         <div className="card">
           <p className="small">{HELP[current.id]}</p>
           <NotesEditor key={current.id} kind={current.id} />

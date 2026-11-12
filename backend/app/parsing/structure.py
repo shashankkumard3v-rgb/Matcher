@@ -21,6 +21,67 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+# ---------- company names ----------
+# The same employer gets written many ways: "Finlytics Pvt Ltd" / "Finlytics Private Limited" /
+# "Finlytics", "Gruve AI" / "Gruve.ai" / "Gruve Inc.", "Amazon Web Services" / "AWS", and
+# "FinlyticsPvtLtd" when a PDF lost its spaces. All of these must count as one company, or your
+# notes for a job are silently ignored.
+_LEGAL = {"pvt", "private", "ltd", "limited", "inc", "incorporated", "llc", "llp", "plc", "corp",
+          "corporation", "co", "company", "gmbh", "ag", "sa", "bv", "pte", "pty", "the", "and"}
+_LEGAL_TAIL = ("corporation", "incorporated", "limited", "private", "gmbh", "corp", "ltd", "pvt", "llc",
+               "llp", "inc", "plc", "pte", "pty")
+
+
+def _company_tokens(name: str) -> list[str]:
+    t = re.sub(r"[^a-z0-9]+", " ", (name or "").lower().replace("&", " and "))
+    return [x for x in t.split() if x not in _LEGAL]
+
+
+def company_key(name: str | None) -> str:
+    """'Finlytics Pvt. Ltd.' -> 'finlytics'; 'Gruve.ai' and 'Gruve AI' -> 'gruveai'."""
+    toks = _company_tokens(name or "")
+    key = "".join(toks)
+    if len(toks) == 1:                       # words joined together: "finlyticspvtltd"
+        changed = True
+        while changed:
+            changed = False
+            for suf in _LEGAL_TAIL:
+                if key.endswith(suf) and len(key) - len(suf) >= 3:
+                    key, changed = key[: -len(suf)], True
+    return key
+
+
+def company_matches(a: str | None, b: str | None) -> bool:
+    """True when two names are the same employer written differently."""
+    ka, kb = company_key(a), company_key(b)
+    if not ka or not kb:
+        return False
+    if ka == kb:
+        return True
+    ta, tb = _company_tokens(a or ""), _company_tokens(b or "")
+    short_t, long_t = sorted((ta, tb), key=len)
+    if short_t and long_t[: len(short_t)] == short_t and len("".join(short_t)) >= 3:
+        return True                                         # whole words: "Finlytics" / "Finlytics Payments"
+    short = min((ka, kb), key=len)
+    for x, y in ((a, kb), (b, ka)):                           # "Amazon Web Services" / "AWS"
+        toks = _company_tokens(x or "")
+        if len(toks) >= 2 and "".join(t[0] for t in toks) == y:
+            return True
+    import difflib
+    return len(short) >= 5 and difflib.SequenceMatcher(None, ka, kb).ratio() >= 0.88   # a typo
+
+
+def mentions_company(company: str | None, text: str) -> bool:
+    """Whether a notes line names this employer ("Built X at Finlytics" for "Finlytics Pvt Ltd")."""
+    key = company_key(company)
+    if len(key) < 3:
+        return False
+    compact = re.sub(r"[^a-z0-9]+", "", (text or "").lower())
+    if len(key) >= 5:
+        return key in compact
+    return bool(re.search(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", (text or "").lower()))
+
+
 def found_in_source(snippet: str, source_norm: str, threshold: float = 0.9) -> bool:
     """True if snippet appears in the source (exactly, or as a near match)."""
     n = _norm(snippet)

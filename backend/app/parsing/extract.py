@@ -74,6 +74,31 @@ def _web_links(urls) -> str:
     return ("\n\nLinks: " + " , ".join(out)) if out else ""
 
 
+# Many PDFs (LaTeX/Overleaf, Canva, online resume builders) contain no space characters: words
+# are just placed with a small gap. pdfplumber's default joins letters closer than 3 pt, and a
+# word gap at 10 pt is only ~2.5 pt, so "Designed and built" came out as "Designedandbuilt".
+# Measuring the gap relative to the letter size fixes that; each page is read both ways and the
+# one that looks more like real text is kept (so PDFs that were fine before stay exactly the same).
+X_TOLERANCE_RATIO = 0.12
+_LONG_WORD = re.compile(r"[A-Za-z]{19,}")          # run-together words ("Designedandbuilt...")
+_LONE_LETTER = re.compile(r"(?<![\w.])[B-HJ-Zb-hj-z](?![\w.])")   # split words ("Kub e rnetes")
+
+
+def _oddness(text: str) -> float:
+    words = max(len(text.split()), 1)
+    return (len(_LONG_WORD.findall(text)) * 3 + len(_LONE_LETTER.findall(text))) / words
+
+
+def page_text(page) -> str:
+    """The page's text, with spaces between words even when the PDF has no space characters."""
+    plain = page.extract_text(layout=False) or ""
+    try:
+        spaced = page.extract_text(layout=False, x_tolerance_ratio=X_TOLERANCE_RATIO) or ""
+    except TypeError:          # an older pdfplumber without x_tolerance_ratio
+        return plain
+    return spaced if _oddness(spaced) < _oddness(plain) else plain
+
+
 def extract_pdf(data: bytes) -> Extracted:
     warnings: list[tuple[str, str]] = []
     try:
@@ -86,7 +111,7 @@ def extract_pdf(data: bytes) -> Extracted:
         two_col = False
         urls = []
         for p in pages:
-            texts.append(p.extract_text(layout=False) or "")
+            texts.append(page_text(p))
             two_col = two_col or _looks_two_column(p)
             try:
                 urls += [h.get("uri") for h in p.hyperlinks]

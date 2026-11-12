@@ -17,7 +17,7 @@ from app.parsing.extract import (
     extract_text,
 )
 from app.parsing.projects import parse_project_context
-from app.parsing.structure import _norm, structure_jd, structure_resume
+from app.parsing.structure import _norm, company_matches, structure_jd, structure_resume
 from app.schemas.models import ParseResult, ParseWarning, ProjectContext, Resume
 
 
@@ -46,38 +46,34 @@ def load_project_context() -> ProjectContext:
 
 
 def cross_check_employers(resume: Resume, ctx: ProjectContext) -> list[ParseWarning]:
-    """Each project's employer must match a job on the resume (bullets go under that job)."""
-    companies = {_norm(j.company) for j in resume.experience if j.company}
-    out: list[ParseWarning] = []
-    for p in ctx.projects:
-        if not p.employer:
-            continue  # already reported as a missing field
-        e = _norm(p.employer)
-        if not any(e == c or e in c or c in e for c in companies):
-            out.append(ParseWarning(
-                source="projects", code="employer_not_on_resume",
-                message=(f"Project '{p.name}' says employer '{p.employer}', which isn't a job "
-                         "on your resume. Which job should its bullets go under?"),
-            ))
-    return out
+    """Saved answers (projects) for a job that isn't on this resume are simply not used for it:
+    that's normal when you keep several resumes, so it isn't a warning. You can see and remove
+    saved answers in My info -> Saved answers."""
+    return []
+
+
+def _jobs_list(companies: list[str]) -> str:
+    return "its jobs: " + ", ".join(companies) if companies else "it has no jobs with a company name"
 
 
 def cross_check_note_companies(resume: Resume) -> list[ParseWarning]:
     """Each "Company:" block in your experience notes should match a job on the resume,
     otherwise its facts can't go under that job."""
     from app.context import notes
-    companies = {_norm(j.company) for j in resume.experience if j.company}
+    companies = [j.company for j in resume.experience if j.company]
     out: list[ParseWarning] = []
     for line in notes.read_raw("experience").splitlines():
         m = re.match(r"^\s*(?:company|employer)\s*[:\-]\s*(.+)$", line, re.IGNORECASE)
         if not m or "[" in m.group(1):
             continue
-        e = _norm(m.group(1))
-        if e and not any(e == c or e in c or c in e for c in companies):
+        name = m.group(1).strip()
+        if name and not any(company_matches(name, c) for c in companies):
             out.append(ParseWarning(
                 source="projects", code="employer_not_on_resume",
-                message=(f"Your experience notes have 'Company: {m.group(1).strip()}', which isn't a job "
-                         "on your resume. Check the spelling matches your resume."),
+                message=(f"Your experience notes have 'Company: {name}', which doesn't match any job on this "
+                         f"resume ({_jobs_list(companies)}). Notes under it can't be used for this resume. "
+                         "If it's one of those jobs, write the name the same way in My info; if it's a job "
+                         "this resume leaves out, you can ignore this."),
             ))
     return out
 

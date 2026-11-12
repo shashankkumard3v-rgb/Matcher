@@ -71,6 +71,7 @@ export const api = {
   saveNotes: (kind, text) => request("PUT", `/context/notes/${kind}`, { text }),
   context: () => request("GET", "/context"),
   saveContext: (text) => request("PUT", "/context", { text }),
+  deleteSavedAnswer: (id) => request("DELETE", `/context/projects/${encodeURIComponent(id)}`),
   previewContext: (text) => request("POST", "/context/preview", { text }),
 
   // My resumes + JD-first runs

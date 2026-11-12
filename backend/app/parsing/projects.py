@@ -207,6 +207,18 @@ def upsert_project(text: str, project: Project) -> str:
     return text.rstrip() + "\n\n" + block
 
 
+def remove_project(text: str, project_id: str) -> str | None:
+    """The text without that project's block (matched by id), or None if it isn't there."""
+    ctx = parse_project_context(text)
+    p = next((x for x in ctx.projects if x.id == project_id), None)
+    if p is None:
+        return None
+    span = _block_span(text, _PROJECT_HDR, p.name)
+    if not span:
+        return None
+    return text[: span[0]] + text[span[1]:].lstrip("\n")
+
+
 def upsert_profile(text: str, profile: Profile) -> str:
     block = render_profile_block(profile) + "\n\n"
     span = _block_span(text, _PROFILE_HDR)

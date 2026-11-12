@@ -130,6 +130,18 @@ async def save_context(body: ContextText):
     return ContextResponse(text=body.text, parsed=parse_project_context(body.text))
 
 
+@router.delete("/context/projects/{project_id}", response_model=ContextResponse)
+async def delete_saved_answer(project_id: str):
+    """Remove one saved answer (a project block) from what Matcher may use."""
+    from app.context import storage
+    from app.parsing.projects import remove_project
+    text = remove_project(storage.read_text("template"), project_id)
+    if text is None:
+        raise HTTPException(404, {"code": "not_found", "message": "That saved answer is already gone."})
+    storage.write_text("template", text)   # the previous version is kept as a backup
+    return ContextResponse(text=text, parsed=parse_project_context(text))
+
+
 class ScoreResponse(BaseModel):
     run_id: str
     file: str

@@ -358,7 +358,7 @@ img { max-width: 100%; }
 }
 .btn:active:not(:disabled), .bottomnav a:active, .tab:active { transform: scale(0.98); }
 @media (max-width: 699px) {
-  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; }
+  .tabs { display: grid; grid-template-columns: repeat(2, 1fr); overflow: visible; }
   .tab { text-align: center; }
 }
 
@@ -377,3 +377,9 @@ img { max-width: 100%; }
 .working-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30vw; }
 .spinner-xs { width: 12px; height: 12px; border-width: 2px; }
 @media (max-width: 420px) { .working-label { max-width: 22vw; } }
+
+/* Long unbroken text (a web address, or words a PDF ran together) breaks inside the word
+   instead of spilling out of its box. Normal text still wraps between words as usual. */
+body { overflow-wrap: anywhere; }
+pre, .version-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.chip { max-width: 100%; }

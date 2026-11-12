@@ -23,8 +23,8 @@ node_modules/
 # Old app builds pile up in dist/assets: keep only the current one (named in dist/index.html).
 # (Claude updates these two lines whenever it rebuilds the app.)
 frontend/dist/assets/*
-!frontend/dist/assets/index-DKQK6gFs.js
-!frontend/dist/assets/index-Cv6epyp0.css
+!frontend/dist/assets/index-DZKI7AH6.js
+!frontend/dist/assets/index-BxK-X-aj.css
 
 # Old, unused file still on the laptop
 backend/app/parsing/prompts.py

@@ -136,7 +136,11 @@ def _key(text: str) -> str:
 
 def _same_heading(a: str, b: str) -> bool:
     ka, kb = _key(a), _key(b)
-    return bool(ka and kb) and (ka == kb or ka.startswith(kb + " ") or kb.startswith(ka + " "))
+    if bool(ka and kb) and (ka == kb or ka.startswith(kb + " ") or kb.startswith(ka + " ")):
+        return True
+    from app.parsing.structure import company_matches      # "Finlytics Pvt Ltd" = "Finlytics"
+    strip = lambda h: re.sub(r"^\s*(company|employer|section)\s*[:\-]\s*", "", h, flags=re.IGNORECASE)
+    return company_matches(strip(a), strip(b))
 
 
 def add_bullets(kind: str, heading: str, bullets: list[str], *, prefix: str = "Company",
