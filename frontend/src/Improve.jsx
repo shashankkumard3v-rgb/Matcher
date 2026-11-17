@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, maybe } from "./api.js";
 import { bump, get as storeGet, track, useChanged, useKept } from "./store.js";
+import { skillLabel } from "./nav.js";
 
 const TARGETS = [80, 85, 90, 95];
 
@@ -289,6 +290,25 @@ function GateCard({ runId, gate, setGate, loop, onStarted }) {
       </div>
       <p className="small">{gate.explanation.how_reached}</p>
 
+      {gate.found_in_notes?.length > 0 && (
+        <details className="small" open>
+          <summary className="strong">Found in your notes ({gate.found_in_notes.length})</summary>
+          <p className="muted">
+            Your resume doesn't show these yet, but your notes do, in other words. They count toward the best
+            possible score, you won't be asked about them, and the improve step adds them first.
+          </p>
+          <ul className="warn-list">
+            {gate.found_in_notes.map((f) => (
+              <li key={f.skill}>
+                <strong>{skillLabel(f.skill)}</strong>{f.job_label ? ` · ${f.job_label}` : ""}
+                {f.quotes.map((q, i) => <div key={i} className="muted">Your notes: “{q}”</div>)}
+                <div>Can become: {f.bullet}</div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       {gate.explanation.top_losses?.length > 0 && (
         <details className="small">
           <summary className="strong">Where the points go</summary>
@@ -383,7 +403,7 @@ function Change({ c, busy, onAction, wordCap = 32 }) {
   const [mode, setMode] = useState(null); // edit | revise
   const [text, setText] = useState(c.new || "");
   const kind = { replace_bullet: "Rewrite", add_bullet: "New bullet", remove_bullet: "Remove",
-                 merge_bullets: "Merge two bullets", set_summary: "Summary" }[c.kind] || c.kind;
+                 merge_bullets: "Merge two bullets", set_summary: "Summary", add_skill: "Add to Skills" }[c.kind] || c.kind;
   const isBullet = ["replace_bullet", "add_bullet", "merge_bullets"].includes(c.kind);
   const n = words(text);
   const st = { accepted: "good", rejected: "soft", blocked: "bad", pending: "warn" }[c.status];
@@ -394,9 +414,16 @@ function Change({ c, busy, onAction, wordCap = 32 }) {
         {c.job_label && <span className="muted">{c.job_label}</span>}
         <span className={`chip chip-${st}`}>{c.status}</span>
         {c.lines_delta != null && <span className="muted">{c.lines_delta > 0 ? "+" : ""}{c.lines_delta} line(s)</span>}
+        {c.points_delta != null && c.points_delta !== 0 && (
+          <span className={`chip chip-${c.points_delta > 0 ? "good" : "bad"}`}
+                title="Exact change in the rules-based points. The AI-judged part is re-scored after you apply.">
+            {c.points_delta > 0 ? "+" : ""}{Math.round(c.points_delta * 10) / 10} pts
+          </span>
+        )}
       </div>
       <div className="small dest">
-        → {c.kind === "set_summary" ? "Resume › Summary" : c.job_label === "Achievements" ? "Resume › Achievements"
+        → {c.kind === "set_summary" ? "Resume › Summary" : c.kind === "add_skill" ? "Resume › Skills"
+          : c.job_label === "Achievements" ? "Resume › Achievements"
           : `Resume › ${c.job_label}`}
         {c.from_notes && <> · from My info › {c.from_notes.replace(" > ", " › ")}</>}
       </div>
