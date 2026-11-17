@@ -315,6 +315,7 @@ class Change(BaseModel):
     status: str = "pending"  # pending | accepted | rejected | blocked
     lines_delta: Optional[int] = None  # fit rounds: lines this edit adds (+) or saves (-)
     points_delta: Optional[float] = None  # exact change in the rules-based points (computed by code)
+    impact: list[str] = Field(default_factory=list)  # plain facts about what this edit does (code-made)
     edited_by_you: bool = False
     feedback_history: list[str] = Field(default_factory=list)
     from_notes: Optional[str] = None  # which My info section the facts come from

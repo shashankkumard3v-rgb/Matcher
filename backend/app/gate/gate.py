@@ -369,10 +369,10 @@ async def revise_proposal(llm: LLMClient, d: Path, pid: str, message: str) -> Ga
 
 async def add_context(llm: LLMClient, d: Path, text: str) -> GateState:
     state = _require(d)
-    prop = await updater.propose(llm, text, runs.load_resume(d), source="free_text")
-    if prop.action == "none":
-        raise GateError("nothing_to_add", prop.summary or "I couldn't find a fact to add in that.")
-    state.proposals.append(prop)
+    props = await updater.propose_many(llm, text, runs.load_resume(d), source="free_text")
+    if not props:
+        raise GateError("nothing_to_add", "I couldn't find a fact to add in that.")
+    state.proposals += props
     save_state(d, state)
     return state
 

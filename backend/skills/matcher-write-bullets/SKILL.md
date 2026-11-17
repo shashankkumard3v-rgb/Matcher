@@ -32,6 +32,22 @@ with a Kafka consumer service in Python"
 Summary: who the user is (title, years only if given), their strongest JD-relevant skills
 and domain, from the facts given. No first person, no buzzwords, at most 45 words.
 
+## Context you get
+
+JOBS lists each job these items belong to (title, company, dates) with ALL its current bullets.
+Each item's "job" says which one. Use it to write for that job's scope and level, and never
+repeat what another bullet of that job already says.
+
+## Goal, must_keep and AVOID
+
+- GOAL says what this round is trying to achieve (the gaps, most points first) and what every
+  bullet must contain. Write toward it.
+- Each item has "must_keep": the numbers and tools from the source. The new bullet must contain
+  every one of them, exactly (you may reorder the sentence). Code checks this and rejects a
+  bullet that drops one.
+- AVOID lists bullets already on the resume. Never write a bullet that says the same thing as
+  one of them (other than the item's own "current"). Code checks this too.
+
 ## Output
 
 Reply with ONLY a JSON object (no prose, no code fences):

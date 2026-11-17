@@ -25,9 +25,10 @@ def test_validate_plan_respects_limits_and_ignores_junk(tmp_workspace):
            "add": [{"job": 0, "facts": ["f0"]}, {"job": 0, "facts": ["f1"]}, {"job": 0, "facts": ["nope"]}],
            "summary": "rewrite"}
     plan = split.validate_plan(raw, rep, facts, split.rule_plan(rep, facts))
-    assert plan["bullets"]["j0b0"]["action"] == "remove" and "j9b9" not in plan["bullets"]
+    # 3 bullets - 1 removed - 1 merged would leave 1: every job keeps 2, so the removal is dropped
+    assert "j0b0" not in plan["bullets"] and "j9b9" not in plan["bullets"]
     assert plan["bullets"]["j0b2"] == {"action": "merged_into", "into": "j0b1"}
-    # 3 bullets - 1 removed - 1 merged = 1 left, cap 4 -> room for both adds
+    # 2 left, cap 4 -> room for both adds
     assert [a["facts"] for a in plan["add"]] == [["f0"], ["f1"]] and plan["summary"] == "rewrite"
 
 
@@ -96,9 +97,10 @@ def test_split_round_plans_then_rewords_and_writes(tmp_workspace, resume_pdf, jd
     assert rw["status"] == "pending" and all(src["verified"] for src in rw["sources"])
     assert add["status"] == "pending" and "Kafka" in add["new"] and add["from_notes"]
     assert r["plan"]["bullets"]["j0b1"]["action"] == "reword" and not r["plan"]["used_rules"]
-    # the reword call only saw the facts for its item, not the whole resume
+    # the reword call sees the whole job it works on (so it doesn't repeat a bullet), not other jobs
     reword_input = llm.inputs[llm.calls.index("matcher-reword")]
-    assert "Built REST APIs" not in reword_input
+    assert "Built REST APIs" in reword_input and "Company A" in reword_input
+    assert "Maintained Django admin tools" not in reword_input
 
 
 def test_plan_failure_falls_back_to_rules(tmp_workspace, resume_pdf, jd_docx, monkeypatch):

@@ -16,6 +16,7 @@ import logging
 
 from app.llm.base import LLMClient
 from app.loop import bullets as bullets_mod
+from app.loop import goals as goals_mod
 from app.parsing.structure import _norm
 from app.schemas.models import JobDescription, Resume, Round, ScoreResult
 
@@ -45,7 +46,9 @@ def plan_input(jd: JobDescription, rep: bullets_mod.BulletReport, facts: dict[st
     fl = [{"id": fid, "job": c.job, "text": c.text, "value": c.value, "shows": c.shows} for fid, c in facts.items()]
     limits = {j.job: {"job": j.job_label, "now": j.count, "max": j.cap} for j in rep.jobs}
     problems = [{"id": p.id, "label": p.label, "points_lost": p.points_lost} for p in r.problems if p.fix_by != "none"]
+    from app.loop import goals
     return "\n\n".join([
+        goals.goal_block(jd, r),
         "JD:\n" + json.dumps(_jd_view(jd), ensure_ascii=False),
         "BULLETS:\n" + json.dumps(bl, ensure_ascii=False, indent=1),
         "FACTS:\n" + json.dumps(fl, ensure_ascii=False, indent=1),
@@ -102,15 +105,22 @@ def validate_plan(raw: dict, rep: bullets_mod.BulletReport, facts: dict[str, bul
         use = [f for f in (d.get("use_facts") or []) if f in facts and facts[f].job == info[d["id"]].job]
         decided[d["id"]] = {"action": d["action"], "merge_with": d.get("merge_with"),
                             "use_facts": use, "focus": str(d.get("focus") or "")}
-    # each job keeps at least one bullet
+    # each job keeps at least min_bullets() bullets: the AI's removals (then merges) past that are dropped
     for j in rep.jobs:
         ids = [_bid(j.job, b) for b in range(j.count)]
-        gone = [i for i in ids if decided.get(i, {}).get("action") in ("remove", "merged_into")]
-        if ids and len(gone) == len(ids):
-            for i in gone:
-                if decided[i]["action"] == "remove":
-                    decided.pop(i)
-                    break
+        keep_at_least = min(bullets_mod.min_bullets(), j.count)
+        left = lambda: sum(1 for i in ids if decided.get(i, {}).get("action") not in ("remove", "merged_into"))
+        for i in reversed(ids):
+            if left() >= keep_at_least:
+                break
+            if decided.get(i, {}).get("action") == "remove":
+                decided.pop(i)
+        for i in reversed(ids):
+            if left() >= keep_at_least:
+                break
+            if decided.get(i, {}).get("action") == "merged_into":
+                decided.pop(decided[i]["into"], None)
+                decided.pop(i)
     # adds, within the limit of each job
     room = {}
     for j in rep.jobs:
@@ -143,20 +153,41 @@ def validate_plan(raw: dict, rep: bullets_mod.BulletReport, facts: dict[str, bul
 
 # ---------- 2. write ----------
 
-def _write_input(items: list[dict], jd: JobDescription, word_cap: int, r: Round) -> str:
+def jobs_view(resume: Resume | None, only: set[int] | None = None) -> list[dict]:
+    """Each job with its details and current bullets: the AI sees the whole job it is writing for
+    (so it doesn't repeat another bullet, and keeps the right company, dates and scope)."""
+    if resume is None:
+        return []
+    return [{"job": i, "title": j.title, "company": j.company,
+             "dates": " - ".join(x for x in (j.start, j.end) if x), "location": j.location,
+             "bullets": list(j.bullets)}
+            for i, j in enumerate(resume.experience) if only is None or i in only]
+
+
+def _write_input(items: list[dict], jd: JobDescription, word_cap: int, r: Round,
+                 resume: Resume | None = None) -> str:
+    from app.loop import goals
+    jobs = {it["job"] for it in items if isinstance(it.get("job"), int)}
     return "\n\n".join([
+        goals.goal_block(jd, r),
         "JD:\n" + json.dumps(_jd_view(jd), ensure_ascii=False),
+        "AVOID (already on the resume; never write the same thing again, except the item's own "
+        "\"current\" bullet you are rewriting):\n" + json.dumps(goals.avoid_list(resume, jobs) if resume else [],
+                                                              ensure_ascii=False, indent=1),
+        "JOBS (the jobs these items belong to, with all their current bullets):\n"
+        + json.dumps(jobs_view(resume, jobs), ensure_ascii=False, indent=1),
         f"MAX WORDS: {word_cap}",
         "USER NOTES:\n" + ("\n".join(f"- {n}" for n in r.notes) or "(none)"),
         "ITEMS:\n" + json.dumps(items, ensure_ascii=False, indent=1),
     ])
 
 
-async def _run_items(llm: LLMClient, skill: str, items: list[dict], jd, word_cap, r) -> dict[str, str]:
+async def _run_items(llm: LLMClient, skill: str, items: list[dict], jd, word_cap, r,
+                     resume: Resume | None = None) -> dict[str, str]:
     if not items:
         return {}
     try:
-        data = await llm.run_skill(skill, _write_input(items, jd, word_cap, r))
+        data = await llm.run_skill(skill, _write_input(items, jd, word_cap, r, resume))
     except Exception as e:  # one failed step shouldn't lose the other step's work
         logger.warning("%s failed: %s", skill, e)
         return {}
@@ -193,17 +224,20 @@ async def suggest(llm: LLMClient, resume: Resume, jd: JobDescription, score: Sco
                           "why": d["focus"] or "Earns nothing for this job.", "fixes": ["bullets:no_value"],
                           "sources": []})
         elif d["action"] in ("reword", "merge"):
-            item = {"id": f"r{len(reword) + 1}", "current": b.text,
+            item = {"id": f"r{len(reword) + 1}", "job": b.job, "current": b.text,
+                    "must_keep": goals_mod.must_keep(b.text),
                     "facts": list(dict.fromkeys(b.related_notes + [facts[f].text for f in d["use_facts"]])),
                     "bring_out": list(dict.fromkeys(b.could_show + b.shows)), "focus": d["focus"]}
             if d["action"] == "merge":
                 o = info[d["merge_with"]]
                 item["current2"] = o.text
+                item["must_keep"] = goals_mod.must_keep(b.text, o.text)
                 item["facts"] = list(dict.fromkeys(item["facts"] + o.related_notes))
                 item["bring_out"] = list(dict.fromkeys(item["bring_out"] + o.could_show + o.shows))
             reword.append((item, b, d))
     for a in plan["add"]:
-        item = {"id": f"a{len(write) + 1}", "facts": [facts[f].text for f in a["facts"]],
+        item = {"id": f"a{len(write) + 1}", "job": a["job"], "facts": [facts[f].text for f in a["facts"]],
+                "must_keep": goals_mod.must_keep(*[facts[f].text for f in a["facts"]])[:8],
                 "bring_out": list(dict.fromkeys(s for f in a["facts"] for s in facts[f].shows)),
                 "focus": a["focus"]}
         write.append((item, a))
@@ -214,8 +248,8 @@ async def suggest(llm: LLMClient, resume: Resume, jd: JobDescription, score: Sco
                        "bring_out": jd.must_have[:6], "focus": plan["summary_focus"]}, None))
 
     new_r, new_w = await asyncio.gather(
-        _run_items(llm, REWORD_SKILL, [i for i, _, _ in reword], jd, word_cap, r),
-        _run_items(llm, WRITE_SKILL, [i for i, _ in write], jd, word_cap, r))
+        _run_items(llm, REWORD_SKILL, [i for i, _, _ in reword], jd, word_cap, r, resume),
+        _run_items(llm, WRITE_SKILL, [i for i, _ in write], jd, word_cap, r, resume))
 
     def notes_src(texts):
         return [{"type": "notes", "project_id": "experience", "quote": t} for t in texts]

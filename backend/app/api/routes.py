@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app import config
 from app.llm.base import LLMClient, LLMError
 from app.llm.factory import make_llm, provider_name
-from app.parsing.extract import ExtractionError
+from app.parsing.extract import ExtractionError, extract_file
 from app.parsing.pipeline import load_project_context, parse_inputs
 from app.parsing.projects import parse_project_context
 from app.schemas.models import ParseResult, ProjectContext
@@ -750,17 +750,28 @@ async def save_notes(kind: str, body: ContextText):
 
 @router.post("/context/notes/{kind}/upload")
 async def upload_notes(kind: str, file: UploadFile = File(...), mode: str = Form("append")):
-    """Upload a .txt (or .md) file into experience or skills notes: mode = append | replace."""
+    """Upload your notes as a file (.docx Word, .pdf, .txt or .md) into experience or skills
+    notes: mode = append | replace. Word and PDF are read as text, keeping line breaks."""
     name = (file.filename or "").lower()
-    if not name.endswith((".txt", ".md")):
-        raise HTTPException(400, "Upload a .txt (or .md) file.")
+    if not name.endswith((".txt", ".md", ".docx", ".pdf")):
+        raise HTTPException(400, "Upload a Word (.docx), PDF, .txt or .md file.")
     raw = await file.read()
-    if len(raw) > notes_mod.MAX_BYTES:
-        raise HTTPException(413, "File is larger than 200 KB.")
-    try:
-        text = raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = raw.decode("cp1252", errors="replace")  # Notepad's older default on Windows
+    if name.endswith((".docx", ".pdf")):
+        if len(raw) > 10 * 1024 * 1024:
+            raise HTTPException(413, "File is larger than 10 MB.")
+        try:
+            text = extract_file(name, raw, {".docx", ".pdf"}).text
+        except ExtractionError as e:
+            raise HTTPException(400, str(e))
+        if len(text.encode("utf-8")) > notes_mod.MAX_BYTES:
+            raise HTTPException(413, "That document has more text than notes can hold (200 KB).")
+    else:
+        if len(raw) > notes_mod.MAX_BYTES:
+            raise HTTPException(413, "File is larger than 200 KB.")
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = raw.decode("cp1252", errors="replace")  # Notepad's older default on Windows
     try:
         if mode == "replace":
             notes_mod.save(kind, text)

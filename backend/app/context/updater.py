@@ -76,7 +76,8 @@ def _find(ctx: ProjectContext, project_id: str | None, name: str | None) -> Proj
 
 
 def build_input(answer: str, question: str | None, resume: Resume, ctx: ProjectContext,
-                today: date | None = None, previous: str | None = None, chat: list[str] | None = None) -> str:
+                today: date | None = None, previous: str | None = None, chat: list[str] | None = None,
+                focus: dict | None = None) -> str:
     jobs = [{"title": j.title, "company": j.company, "start": j.start, "end": j.end}
             for j in resume.experience]
     projects = [{"id": p.id, "name": p.name, "employer": p.employer} for p in ctx.projects]
@@ -86,6 +87,8 @@ def build_input(answer: str, question: str | None, resume: Resume, ctx: ProjectC
         + f"RESUME JOBS: {json.dumps(jobs, ensure_ascii=False)}\n"
         + f"EXISTING PROJECTS: {json.dumps(projects, ensure_ascii=False)}\n"
         + f"TODAY: {(today or date.today()).isoformat()}"
+        + (f"\nJOB THIS IS ABOUT (on the resume now; don't repeat its bullets): {json.dumps(focus, ensure_ascii=False)}"
+           if focus else "")
         + (f"\nPREVIOUS DRAFT (your last proposal; rewrite it as the user asks below):\n{previous}" if previous else "")
         + ("\nUSER'S CHANGES (newest last; new facts here count like the ANSWER, instructions change the draft):\n"
            + "\n".join(f"- {m}" for m in chat) if chat else "")
@@ -94,9 +97,10 @@ def build_input(answer: str, question: str | None, resume: Resume, ctx: ProjectC
 
 async def propose(llm: LLMClient, answer: str, resume: Resume, *, question: str | None = None,
                   source: str = "free_text", previous: str | None = None,
-                  chat: list[str] | None = None) -> ContextProposal:
+                  chat: list[str] | None = None, focus: dict | None = None) -> ContextProposal:
     ctx = parse_project_context(_read_template())
-    data = await llm.run_skill(SKILL, build_input(answer, question, resume, ctx, previous=previous, chat=chat))
+    data = await llm.run_skill(SKILL, build_input(answer, question, resume, ctx, previous=previous, chat=chat,
+                                                  focus=focus))
     said = answer + "\n" + "\n".join(chat or [])      # everything YOU wrote: the only source of facts
     if not isinstance(data, dict):
         raise LLMError("update-context reply was not a JSON object")
@@ -157,15 +161,86 @@ async def propose(llm: LLMClient, answer: str, resume: Resume, *, question: str 
     return prop
 
 
+def _job_for(resume: Resume, employer: str | None, message: str) -> dict | None:
+    """The resume job this draft is about (by its employer, or a company named in your message),
+    with all its bullets, so the AI knows exactly what you're working on."""
+    from app.parsing.structure import company_matches, mentions_company
+    for j in resume.experience:
+        if j.company and ((employer and company_matches(j.company, employer)) or mentions_company(j.company, message)):
+            return {"title": j.title, "company": j.company, "dates": " - ".join(x for x in (j.start, j.end) if x),
+                    "bullets": list(j.bullets)}
+    return None
+
+
 async def revise(llm: LLMClient, prop: ContextProposal, message: str, resume: Resume) -> ContextProposal:
     """You tell the AI what to change ("it was at Yanolja", "make it shorter", "add that I led 3
     people"): it redoes the draft. New facts count only because YOU wrote them; the earlier
     draft is just a starting point, never a source of facts."""
     chat = prop.chat + [message.strip()]
     new = await propose(llm, prop.user_text, resume, question=prop.question, source=prop.source,
-                        previous=prop.after or None, chat=chat)
+                        previous=prop.after or None, chat=chat,
+                        focus=_job_for(resume, prop.project.employer if prop.project else None, message))
     new.id = prop.id
     return new
+
+
+CHUNK_CHARS = 2000
+
+
+def split_long(text: str, limit: int = CHUNK_CHARS) -> list[str]:
+    """A long paste (a whole job history) is too much for one AI request: split it at company
+    headings and blank lines into pieces of about `limit` characters, never mid-line."""
+    text = (text or "").replace("\r\n", "\n").strip()
+    if len(text) <= limit:
+        return [text] if text else []
+    blocks, cur = [], []
+    for line in text.split("\n"):
+        starts = re.match(r"^\s*(company|employer)\s*[:\-]|^\s*##", line, re.IGNORECASE)
+        if (not line.strip() or starts) and cur:
+            blocks.append("\n".join(cur).strip())
+            cur = []
+        if line.strip():
+            cur.append(line)
+    if cur:
+        blocks.append("\n".join(cur).strip())
+    out, buf = [], ""
+    head = ""
+    for b in blocks:
+        if re.match(r"^\s*(company|employer)\s*[:\-]|^\s*##", b, re.IGNORECASE):
+            head = b.split("\n", 1)[0]
+        pieces = [b] if len(b) <= limit else _by_lines(b, limit)
+        for piece in pieces:
+            if buf and len(buf) + len(piece) + 2 > limit:
+                out.append(buf)
+                buf = head + "\n" + piece if head and not piece.startswith(head) else piece
+            else:
+                buf = (buf + "\n\n" + piece) if buf else piece
+    if buf:
+        out.append(buf)
+    return out
+
+
+def _by_lines(block: str, limit: int) -> list[str]:
+    out, buf = [], ""
+    for line in block.split("\n"):
+        if buf and len(buf) + len(line) + 1 > limit:
+            out.append(buf)
+            buf = line
+        else:
+            buf = (buf + "\n" + line) if buf else line
+    if buf:
+        out.append(buf)
+    return out
+
+
+async def propose_many(llm: LLMClient, text: str, resume: Resume, *, source: str) -> list[ContextProposal]:
+    """One draft per piece of a long paste, so nothing gets cut off or mixed up."""
+    out = []
+    for piece in split_long(text):
+        prop = await propose(llm, piece, resume, source=source)
+        if prop.action != "none":
+            out.append(prop)
+    return out
 
 
 def apply(prop: ContextProposal) -> ProjectContext:

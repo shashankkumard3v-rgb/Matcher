@@ -43,7 +43,7 @@ def test_a_merge_must_keep_every_number():
             new="Built a Python Kafka pipeline and tuned PostgreSQL queries, cutting report time to 2s")
     m.bullet2 = 2
     guard.review(r, JD, [m])
-    assert m.status == "blocked" and any("40, 9" in i for i in m.truth_issues)
+    assert m.status == "blocked" and any("40%" in i and "9s" in i for i in m.truth_issues)
 
 
 def test_two_edits_on_one_bullet_keep_the_one_worth_more():

@@ -93,21 +93,37 @@ def _apply(resume: Resume, changes: list[Change]) -> Resume:
     return apply_changes(resume, changes)
 
 
-def review(resume: Resume, jd: JobDescription, changes: list[Change], by_you: bool = False) -> None:
+def review(resume: Resume, jd: JobDescription, changes: list[Change], by_you: bool = False,
+           fit: bool = False) -> None:
     """Sets points_delta on each edit and blocks the harmful ones (your own edits only get a note)."""
     before_pts = code_points(resume, jd)
     before_skills = shown_skills(resume, jd)
     for c in changes:
         after = _apply(resume, [c])
         c.points_delta = round(code_points(after, jd) - before_pts, 2)
+        c.impact = explain(resume, after, jd, c, before_skills)
         issues = []
         lost = sorted(before_skills - shown_skills(after, jd))
         if lost:
             issues.append("Loses the only proof of " + ", ".join(lost) + " on the resume.")
-        if c.kind == "merge_bullets" and c.new:
-            dropped = (_numbers(c.old) | _numbers(c.old2)) - _numbers(c.new)
-            if dropped:
-                issues.append("The merged bullet drops number(s) " + ", ".join(sorted(dropped)) + ".")
+        notes_only: list[str] = []
+        if c.kind in ("replace_bullet", "merge_bullets") and c.new and c.old:
+            from app.loop.goals import dropped
+            lost_bits = dropped(c.old, c.old2, c.new)
+            if lost_bits:
+                msg = ("Drops " + ", ".join(lost_bits) + " from the original. Keep them, or edit it yourself "
+                       "if you really want them gone.")
+                # shortening to fit the page may cut a tool name; numbers are always kept
+                if fit and not any(any(ch.isdigit() for ch in b) for b in lost_bits):
+                    notes_only.append("Note: " + msg)
+                else:
+                    issues.append(msg)
+        if c.kind in ("add_bullet", "replace_bullet", "merge_bullets") and c.new:
+            from app.loop.goals import duplicate_of
+            twin = duplicate_of(c.new, resume, ignore=(c.old or "", c.old2 or ""))
+            if twin:
+                issues.append(f"Says the same as a bullet already on the resume: \"{_short(twin, 80)}\"")
+        c.truth_issues += notes_only
         if not issues:
             continue
         if by_you:
@@ -117,6 +133,52 @@ def review(resume: Resume, jd: JobDescription, changes: list[Change], by_you: bo
             c.truth_ok = False
             if c.status == "pending":
                 c.status = "blocked"
+
+
+def _short(t: str, n: int = 60) -> str:
+    return t if len(t) <= n else t[:n].rsplit(" ", 1)[0] + "…"
+
+
+def explain(before: Resume, after: Resume, jd: JobDescription, c: Change, before_skills: set[str]) -> list[str]:
+    """Plain facts about an edit, so you can decide: what the bullet shows, what is lost or gained,
+    who else shows it, the points, and what you can do instead."""
+    from app.loop.bullets import value_of
+    out: list[str] = []
+    after_skills = shown_skills(after, jd)
+    gained, lost = sorted(after_skills - before_skills), sorted(before_skills - after_skills)
+    if c.kind in ("remove_bullet", "merge_bullets") and c.old:
+        mine = [s for s in jd_skills(jd) if shows(s, c.old)]
+        duties = value_of(c.old, jd)[1]["duties"]
+        if c.kind == "remove_bullet":
+            if mine or duties:
+                out.append("This bullet shows: " + ", ".join(mine + [f"duty \"{_short(x, 40)}\"" for x in duties]) + ".")
+            else:
+                out.append("This bullet shows none of the job's skills or duties.")
+            others = [b for j, job in enumerate(after.experience) for b in job.bullets]
+            kept = [s for s in mine if s not in lost]
+            for s in kept[:3]:
+                by = next((b for b in others if shows(s, b)), None)
+                if by:
+                    out.append(f"{s} stays shown by: \"{_short(by)}\"")
+            out.append("It has a number (good for the impact grade); removing it loses that."
+                       if _numbers(c.old) else "It has no measurable result.")
+            job = before.experience[c.job] if c.job is not None and c.job < len(before.experience) else None
+            if job is not None:
+                out.append(f"{c.job_label or 'This job'} goes from {len(job.bullets)} to {len(job.bullets) - 1} bullets.")
+            out.append("Rather keep it? Reject this, or use Revise and ask to reword it instead.")
+    if gained:
+        out.append("Newly shows: " + ", ".join(gained) + ".")
+    if lost:
+        out.append("No longer shown anywhere: " + ", ".join(lost) + ".")
+    if c.kind in ("replace_bullet", "merge_bullets") and c.new:
+        before_n, after_n = _numbers(c.old) | _numbers(c.old2), _numbers(c.new)
+        if after_n - before_n:
+            out.append("Adds result number(s) from your notes: " + ", ".join(sorted(after_n - before_n)) + ".")
+    if c.points_delta:
+        out.append(f"Rules-based points: {c.points_delta:+g}. The AI-judged part is re-scored after you apply.")
+    elif c.kind == "remove_bullet":
+        out.append("Rules-based points: no change. It frees space on the page.")
+    return out
 
 
 def _touches(c: Change) -> set[tuple]:
@@ -173,3 +235,30 @@ def skill_edits(resume: Resume, jd: JobDescription, found: list, start: int, pre
                     sources=[ChangeSource(type="notes", project_id=None, quote=quote)]))
                 break
     return out
+
+
+# ---------- every job keeps at least 2 bullets ----------
+
+MIN_HINT = "every job keeps at least"
+
+
+def min_check(resume: Resume, changes: list[Change], floor: int) -> None:
+    """Block removals/merges that would leave a job with fewer than `floor` bullets (in the order
+    they'd apply). Re-run after every decision: rejecting one removal can unblock another."""
+    for c in changes:          # undo earlier blocks of this kind; recomputed below
+        if any(MIN_HINT in i for i in c.truth_issues):
+            c.truth_issues = [i for i in c.truth_issues if MIN_HINT not in i]
+            if c.status == "blocked" and not c.truth_issues:
+                c.status, c.truth_ok = "pending", True
+    count = [len(j.bullets) for j in resume.experience]
+    for c in changes:
+        if c.job is None or c.status in ("rejected", "blocked") or c.kind not in ("remove_bullet", "merge_bullets"):
+            continue
+        if count[c.job] - 1 < floor:
+            msg = (f"{c.job_label or 'This job'} would be left with {count[c.job] - 1} bullet(s); "
+                   f"{MIN_HINT} {floor}. Reword it instead, or reject another removal there first.")
+            if c.status == "pending":
+                c.status, c.truth_ok = "blocked", False
+                c.truth_issues.append(msg)
+            continue
+        count[c.job] -= 1

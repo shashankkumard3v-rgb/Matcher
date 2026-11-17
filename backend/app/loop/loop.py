@@ -307,11 +307,11 @@ def skip(d: Path, qid: str) -> LoopState:
 
 async def add_context(llm: LLMClient, d: Path, text: str) -> LoopState:
     s = _require(d)
-    prop = await updater.propose(llm, text, load_version(d, s.current_version), source="loop:free_text")
-    if prop.action == "none":
-        raise LoopError("nothing_to_add", prop.summary or "I couldn't find a fact to add in that.")
-    s.proposals.append(prop)
-    _round(s).proposal_ids.append(prop.id)
+    props = await updater.propose_many(llm, text, load_version(d, s.current_version), source="loop:free_text")
+    if not props:
+        raise LoopError("nothing_to_add", "I couldn't find a fact to add in that.")
+    s.proposals += props
+    _round(s).proposal_ids += [p.id for p in props]
     save_state(d, s)
     return s
 
@@ -385,7 +385,17 @@ def _build_input(jd: JobDescription, resume: Resume, ctx: ProjectContext, r: Rou
     problems = [p.model_dump(include={"id", "label", "points_lost", "cause", "fix_by", "detail"})
                 for p in r.problems if p.fix_by != "none"]
     rep = bullets_mod.analyze(resume, jd, None, cfg, found=found)
+    focus = change.job if change is not None and isinstance(change.job, int) else None
+    if focus is not None:   # redoing one edit: only that job's details, so the request stays small
+        rep.bullets = [b for b in rep.bullets if b.job == focus]
+        rep.candidates = [c for c in rep.candidates if c.job == focus]
+        company = resume.experience[focus].company if focus < len(resume.experience) else None
+        from app.parsing.structure import company_matches
+        ctx = ctx.model_copy(update={"projects": [p for p in ctx.projects
+                                                  if not company or company_matches(p.employer, company)]})
+    from app.loop import goals
     parts = [
+        goals.goal_block(jd, r),
         "JD:\n" + json.dumps(jd.model_dump(), ensure_ascii=False, indent=1),
         "RESUME:\n" + json.dumps(_resume_view(resume), ensure_ascii=False, indent=1),
         "TEMPLATE:\n" + json.dumps(_template_view(ctx), ensure_ascii=False, indent=1),
@@ -410,8 +420,22 @@ def _build_input(jd: JobDescription, resume: Resume, ctx: ProjectContext, r: Rou
         parts.append("LAYOUT:\n" + json.dumps(r.layout, ensure_ascii=False, indent=1))
         parts.append("GOAL: " + r.layout.get("goal", ""))
     if change is not None:
+        if focus is not None and focus < len(resume.experience):
+            from app.context import notes
+            from app.gate.ceiling import _note_is_for
+            job = resume.experience[focus]
+            mine = [ln for h, ln in notes.entries(notes.read_raw("experience"))
+                    if h != ln and job.company and _note_is_for(job.company, h, ln)][:40]
+            parts.append("WORKING ON (the job this edit is for; keep its company, dates and scope):\n"
+                         + json.dumps({**split_mod.jobs_view(resume, {focus})[0],
+                                       "your_notes_for_this_job": mine}, ensure_ascii=False, indent=1))
         parts.append("EDIT TO REDO:\n" + change.model_dump_json(
             include={"kind", "job", "bullet", "old", "new", "fixes", "sources"}, indent=1))
+        if change.old:
+            parts.append("MUST KEEP (numbers and tools from the original bullet; the new text must keep them):\n"
+                         + json.dumps(goals.must_keep(change.old, change.old2 or ""), ensure_ascii=False))
+        if change.feedback_history:
+            parts.append("EARLIER FEEDBACK ON THIS EDIT:\n" + "\n".join(f"- {x}" for x in change.feedback_history))
         parts.append(f"FEEDBACK: {feedback}")
     return "\n\n".join(parts)
 
@@ -536,7 +560,7 @@ async def suggest(llm: LLMClient, d: Path) -> LoopState:
     if not new and not kept:
         raise LoopError("no_suggestions", "The AI had no safe edits to suggest. Add context or answer questions first.")
     await _checks(llm, d, s, new, jd, ctx)
-    guard.review(resume, jd, new)
+    guard.review(resume, jd, new, fit=r.purpose == "fit")
     guard.clashes(new)
     for c in new:
         c.from_notes = next((x for x in (bullets_mod._notes_section(src.quote) for src in c.sources
@@ -546,6 +570,7 @@ async def suggest(llm: LLMClient, d: Path) -> LoopState:
     _length_check(r.changes, cfg)
     if r.purpose != "fit":
         _cap_check(resume, r.changes, cfg)
+    guard.min_check(resume, r.changes, bullets_mod.min_bullets())
     r.stage = "review"
     save_state(d, s)
     return s
@@ -597,7 +622,7 @@ async def change_action(llm: LLMClient, d: Path, cid: str, action: str, text: st
             raise LoopError("revise_failed", "The AI couldn't produce a valid revision. Try different feedback.")
         redo.feedback_history = c.feedback_history + [feedback.strip()]
         await _checks(llm, d, s, [redo], jd, ctx)
-        guard.review(resume, jd, [redo])
+        guard.review(resume, jd, [redo], fit=r.purpose == "fit")
         redo.from_notes = next((x for x in (bullets_mod._notes_section(src.quote) for src in redo.sources
                                              if src.type in ("notes", "template") and src.quote) if x), None)
         _lines_delta(r, [redo])
@@ -607,6 +632,7 @@ async def change_action(llm: LLMClient, d: Path, cid: str, action: str, text: st
     _length_check(r.changes, _cfg())
     if r.purpose != "fit":
         _cap_check(load_version(d, s.current_version), r.changes, _cfg())
+    guard.min_check(load_version(d, s.current_version), r.changes, bullets_mod.min_bullets())
     save_state(d, s)
     return s
 

@@ -38,6 +38,7 @@ loop:
   max_changes_per_round: 10  # suggestions the AI may propose in one round
   max_bullets_per_job: [6, 5, 3]  # bullets allowed per job, newest job first (last number repeats);
                                   # adding past this means replacing or removing a weaker bullet
+  min_bullets_per_job: 2         # a job never drops below this many bullets (reword instead)
   max_words_per_bullet: 32        # longer bullets are blocked (about 2 lines on the page)
   suggest_mode: split             # split = plan first, then reword / write new in small AI calls
                                   # (works better with small models); single = one big call

@@ -77,6 +77,12 @@ class BulletReport(BaseModel):
     candidates: list[Candidate] = Field(default_factory=list)
 
 
+def min_bullets() -> int:
+    """Every job keeps at least this many bullets (config loop.min_bullets_per_job, default 2)."""
+    from app.config import weights_config
+    return int(weights_config().get("loop", {}).get("min_bullets_per_job", 2))
+
+
 def caps_for(n_jobs: int, cfg: dict) -> list[int]:
     raw = cfg.get("max_bullets_per_job", [6, 5, 3])
     seq = [int(x) for x in raw] if isinstance(raw, list) else [int(raw)]

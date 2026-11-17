@@ -20,6 +20,7 @@ from app.export.report import write_report
 from app.llm.base import LLMClient
 from app.loop import loop as loop_mod
 from app.parsing.pipeline import load_project_context
+from app.loop.bullets import min_bullets
 from app.parsing.structure import _norm
 from app.schemas.models import (
     ExportState,
@@ -69,7 +70,7 @@ def trim_options(resume: Resume, jd: JobDescription, look: dict, overflow_lines:
     cpl = _chars_per_line(look)
     opts: list[TrimOption] = []
     for j, job in enumerate(resume.experience):
-        keep_min = 2 if j == 0 else 1
+        keep_min = min_bullets()
         if len(job.bullets) <= keep_min:
             continue
         for b, text in enumerate(job.bullets):
@@ -95,7 +96,7 @@ def trim_options(resume: Resume, jd: JobDescription, look: dict, overflow_lines:
         if freed >= need:
             break
         left = len(resume.experience[o.job].bullets) - per_job.get(o.job, 0)
-        if left - 1 < (2 if o.job == 0 else 1):
+        if left - 1 < min_bullets():
             continue
         o.suggested = True
         per_job[o.job] = per_job.get(o.job, 0) + 1
@@ -237,6 +238,12 @@ async def trim(llm: LLMClient, d: Path, option_ids: list[str]) -> ExportState:
     chosen = [o for o in state.trim_options if o.id in set(option_ids)]
     if not chosen:
         raise ExportError("nothing_chosen", "Choose at least one bullet to cut.")
+    resume = loop_mod.load_version(d, state.version)
+    for j, job in enumerate(resume.experience):
+        cut = sum(1 for o in chosen if o.job == j)
+        if cut and len(job.bullets) - cut < min_bullets():
+            raise ExportError("too_few_bullets", f"{' - '.join(x for x in (job.title, job.company) if x)} would be "
+                              f"left with {len(job.bullets) - cut} bullet(s); every job keeps at least {min_bullets()}.")
     v = await loop_mod.trim_version(llm, d, [(o.job, o.text) for o in chosen],
                                     f"Trimmed {len(chosen)} bullet(s) to fit one page")
     msg = f"Cut {len(chosen)} bullet(s) -> v{v.n}, blind score {v.score}."

@@ -52,7 +52,8 @@ def note_lines(ctx: ProjectContext) -> list[tuple[str, str | None, str]]:
 
 
 def _input(jd: JobDescription, resume: Resume, want: list[str], lines) -> str:
-    jobs = [{"job": i, "title": j.title, "company": j.company} for i, j in enumerate(resume.experience)]
+    jobs = [{"job": i, "title": j.title, "company": j.company, "bullets_already_there": list(j.bullets)}
+            for i, j in enumerate(resume.experience)]
     return "\n\n".join([
         "JOB: " + " · ".join(x for x in (jd.title, jd.company) if x),
         "GAPS (the resume doesn't show these yet):\n" + json.dumps(want, ensure_ascii=False),

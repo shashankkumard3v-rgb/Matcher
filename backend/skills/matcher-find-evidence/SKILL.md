@@ -27,6 +27,7 @@ sender to Celery workers" shows "Asynchronous programming". Judge the work, not 
   - start with a strong past-tense verb; keep the candidate's numbers exactly; never add a
     number, tool, team size, result or claim the lines don't state;
   - write it as a finished resume line, not a note.
+- RESUME JOBS shows each job's bullets_already_there: don't write a bullet that repeats one.
 - Skip gaps the notes don't show. It's fine to return an empty list.
 - Do not run code. Do not create files.
 
