@@ -102,3 +102,44 @@ def test_pdfs_with_real_spaces_read_exactly_as_before(resume_pdf):
     with pdfplumber.open(io.BytesIO(resume_pdf)) as pdf:
         before = "\n".join(p.extract_text() or "" for p in pdf.pages)
     assert extract_pdf(resume_pdf).text.split() == before.split()
+
+
+def test_unknown_symbols_become_bullets_or_disappear():
+    from app.parsing.extract import _clean
+    assert _clean("(cid:136) Built a service\n  (cid:7) Led a team\nCall (cid:0)+91 99999 | Mail") == \
+        "- Built a service\n - Led a team\nCall +91 99999 | Mail"
+
+
+def test_words_glued_with_no_gap_at_all_are_split_back():
+    from app.parsing.extract import unglue_words
+    assert unglue_words("softwaredevelopmentengineer2 | Jan 2022") == "software development engineer 2 | Jan 2022"
+    assert unglue_words("LedmigrationofmicroservicestoKubernetes") == "Led migration of microservices to Kubernetes"
+    assert unglue_words("GruveAIPrivateLimited") == "Gruve AI Private Limited"
+    assert unglue_words("PostgreSQLandRediscaching") == "PostgreSQL and Redis caching"
+
+
+def test_real_long_words_names_and_links_are_left_alone():
+    from app.parsing.extract import unglue_words
+    keep = ("internationalization responsibilities containerization Elasticsearch OpenTelemetry "
+            "troubleshooting shashankkumard3v@gmail.com github.com/shashankkumardeveloper "
+            "linkedin.com/in/shashankkumardevelopers")
+    assert unglue_words(keep) == keep
+
+
+def test_a_pdf_with_glued_words_reads_with_spaces():
+    import io
+    from reportlab.pdfgen import canvas
+    from app.parsing.extract import extract_pdf
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf)
+    y = 800
+    for line in ["softwaredevelopmentengineer2", "Gruve AI, Bengaluru, India, Jan 2022 to present",
+                 "Designedandbuiltareconciliationservice in Go and PostgreSQL for payments",
+                 "Ledmigrationof14microservicestoKubernetes with Helm charts and Terraform"] * 3:
+        c.drawString(50, y, line)
+        y -= 16
+    c.save()
+    text = extract_pdf(buf.getvalue()).text
+    assert "software development engineer 2" in text
+    assert "Designed and built a reconciliation service" in text
+    assert "Led migration of 14 microservices to Kubernetes" in text

@@ -51,6 +51,26 @@ def check_weights(weights: dict) -> None:
         raise ScoreError(f"weights.yaml weights must add up to 100 (they add up to {total}).")
 
 
+def title_follows_scope(det_dims: list, llm_dims: list) -> list:
+    """A different job title isn't a weaker candidate: when the AI judges your level and scope
+    fit the job (seniority_scope), the title points are at least that share. An exact title
+    still earns full points on its own."""
+    scope = next((d for d in llm_dims if d.key == "seniority_scope"), None)
+    if scope is None or not scope.level:
+        return det_dims
+    out = []
+    for d in det_dims:
+        floor = round(d.weight * scope.level / 100, 2)
+        if d.key == "title_alignment" and floor > d.points:
+            d = d.model_copy(update={
+                "points": floor,
+                "reason": f"{d.reason} Raised to {floor:g}/{d.weight:g}: the AI judged your level and scope "
+                          f"as {scope.level}% of what this job needs, so a different title isn't held against you.",
+            })
+        out.append(d)
+    return out
+
+
 async def score_resume(
     llm: LLMClient,
     resume: Resume,
@@ -84,6 +104,7 @@ async def score_resume(
         model=(pins or {}).get("model"),
     )
 
+    det_dims = title_follows_scope(det_dims, llm_dims)
     dims = det_dims + llm_dims
     det_pts = round(sum(d.points for d in det_dims), 2)
     llm_pts = round(sum(d.points for d in llm_dims), 2)

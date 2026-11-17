@@ -11,11 +11,15 @@ from app.scoring.synonyms import alternatives, canonical, close_credit, close_to
 
 SENIORITY_WORDS = {
     "senior", "sr", "junior", "jr", "lead", "principal", "staff", "associate", "intern",
-    "trainee", "mid", "level", "i", "ii", "iii", "iv", "head", "chief", "entry",
+    "trainee", "mid", "level", "i", "ii", "iii", "iv", "v", "head", "chief", "entry",
+    "1", "2", "3", "4", "5", "l1", "l2", "l3", "l4", "l5", "grade",
 }
 TITLE_SYNONYMS = {
     "developer": "engineer", "dev": "engineer", "programmer": "engineer", "sde": "software engineer",
-    "swe": "software engineer", "back end": "backend", "back-end": "backend",
+    "swe": "software engineer", "software development engineer": "software engineer",
+    "software development engineering": "software engineer", "software engineering": "software engineer",
+    "member of technical staff": "software engineer", "mts": "software engineer",
+    "smts": "software engineer", "sdet": "software test engineer", "back end": "backend", "back-end": "backend",
     "front end": "frontend", "front-end": "frontend", "full stack": "fullstack",
     "full-stack": "fullstack", "ml": "machine learning", "ai": "machine learning",
 }
@@ -138,6 +142,8 @@ def coverage_dimension(key: str, label: str, weight: float, hits: list[SkillHit]
 
 def _title_tokens(title: str) -> set[str]:
     t = title.lower()
+    # "SDE2" / "SDE-II" / "SWE3": the level stuck to the role -> "sde 2", "sde ii"
+    t = re.sub(r"\b(sde|swe|sdet|mts|smts|engineer|developer)[-_ ]?(i{1,3}|iv|v|\d)\b", r"\1 \2", t)
     for a, b in sorted(TITLE_SYNONYMS.items(), key=lambda kv: -len(kv[0])):
         t = re.sub(rf"(?<![a-z]){re.escape(a)}(?![a-z])", b, t)
     words = re.findall(r"[a-z0-9+#.]+", t)

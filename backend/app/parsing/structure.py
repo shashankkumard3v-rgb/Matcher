@@ -82,13 +82,47 @@ def mentions_company(company: str | None, text: str) -> bool:
     return bool(re.search(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", (text or "").lower()))
 
 
-def found_in_source(snippet: str, source_norm: str, threshold: float = 0.9) -> bool:
-    """True if snippet appears in the source (exactly, or as a near match)."""
+_ELLIPSIS = re.compile(r"\.{3,}|\u2026|\[\s*\.*\s*\]")
+
+
+def _close_wording(words: list[str], src_words: list[str], need: float = 0.8) -> bool:
+    """The quote's words appear in one place of the source, nearly all and in order (a quote
+    with "the" added or "using" for "with" still counts; numbers must all be there)."""
+    if len(words) < 5:
+        return False
+    nums = {w for w in words if any(c.isdigit() for c in w)}
+    starts = set(words[:3])
+    span = int(len(words) * 1.4) + 2
+    for i, w in enumerate(src_words):
+        if w not in starts:
+            continue
+        window = src_words[i:i + span]
+        if not nums <= set(window):
+            continue
+        hit = sum(b.size for b in SequenceMatcher(None, words, window, autojunk=False).get_matching_blocks())
+        if hit / len(words) >= need:
+            return True
+    return False
+
+
+def found_in_source(snippet: str, source_norm: str, threshold: float = 0.9, loose: bool = False) -> bool:
+    """True if snippet appears in the source (exactly, or as a near match).
+    Also true when the source lost its spaces ("Designedandbuilt...") and for a quote shortened
+    with "..." when every piece is found. loose=True also accepts a lightly reworded quote."""
+    parts = [p for p in _ELLIPSIS.split(snippet or "") if _norm(p)]
+    if len(parts) > 1:
+        return all(found_in_source(p, source_norm, threshold, loose) for p in parts)
     n = _norm(snippet)
     if not n:
         return True
     if n in source_norm:
         return True
+    tight = n.replace(" ", "")
+    if len(tight) >= 12 and tight in source_norm.replace(" ", ""):
+        return True
+    # Near matches must not change a number ("25 microservices" when the resume says 14).
+    if not set(re.findall(r"\d+", n)) <= set(re.findall(r"\d+", source_norm)):
+        return False
     # PDF line-wrapping can split words oddly; fall back to a fuzzy window match.
     words = n.split()
     first = words[0]
@@ -98,7 +132,7 @@ def found_in_source(snippet: str, source_norm: str, threshold: float = 0.9) -> b
         best = max(best, SequenceMatcher(None, n, window[: len(n)]).ratio())
         if best >= threshold:
             return True
-    return False
+    return loose and _close_wording(words, source_norm.split())
 
 
 def verify_resume(resume: Resume, source_text: str) -> list[ParseWarning]:

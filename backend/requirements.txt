@@ -18,3 +18,4 @@ pywin32>=306; sys_platform == "win32"
 pytest>=8.0
 pytest-asyncio>=0.23
 reportlab>=4.0  # only used by tests to build sample PDFs
+wordninja==2.0.0

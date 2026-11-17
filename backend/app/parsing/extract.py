@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import io
+import math
 import re
+from functools import lru_cache
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,7 +33,15 @@ class Extracted:
     warnings: list[tuple[str, str]] = field(default_factory=list)  # (code, message)
 
 
+# A symbol the PDF has no letter for (LaTeX's bullet, icon fonts) comes out as "(cid:136)".
+# At the start of a line it's a bullet; anywhere else it's an icon (phone, mail, ...) and is dropped.
+_CID_BULLET = re.compile(r"^([ \t]*)\(cid:\d+\)[ \t]*", re.MULTILINE)
+_CID = re.compile(r"\(cid:\d+\)")
+
+
 def _clean(text: str) -> str:
+    text = _CID_BULLET.sub(r"\1- ", text)
+    text = _CID.sub(" ", text)
     text = text.replace(" ", " ").replace("•", "-").replace("", "-")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -99,6 +109,91 @@ def page_text(page) -> str:
     return spaced if _oddness(spaced) < _oddness(plain) else plain
 
 
+# Last resort for words a PDF glued together with NO gap at all ("softwaredevelopmentengineer2"):
+# split long glued tokens back into words with a dictionary (wordninja), boosted with the tech
+# names Matcher knows (Kubernetes, PostgreSQL ...). A split is kept only when every piece is a
+# real word, so normal long words ("internationalization", "Elasticsearch") and names/usernames
+# stay as they are.
+_SHORT_OK = {"a", "i", "an", "of", "to", "in", "on", "at", "by", "as", "is", "or", "we", "be", "it", "up",
+             "my", "me", "us", "so", "no", "do", "go", "ai", "ml", "ui", "ux", "qa", "ci", "cd", "os", "db",
+             "ii", "iii", "iv"}
+_GLUED_MIN_LETTERS = 15
+
+
+@lru_cache(maxsize=1)
+def _word_model():
+    try:
+        import wordninja
+    except ImportError:          # not installed yet: run "pip install -r requirements.txt"
+        return None
+    from app.scoring.synonyms import _relations, synonym_table
+    lm = wordninja.LanguageModel.__new__(wordninja.LanguageModel)     # own copy, the default stays untouched
+    lm._wordcost = dict(wordninja.DEFAULT_LANGUAGE_MODEL._wordcost)
+    lm._maxword = wordninja.DEFAULT_LANGUAGE_MODEL._maxword
+    n = len(lm._wordcost)
+    names = [a for a in synonym_table()[1]]
+    rel = _relations()
+    for sec in ("implies", "close", "families"):
+        for k, v in (rel.get(sec) or {}).items():
+            names += [k] + (list(v) if isinstance(v, list) else [])
+    names += list(rel.get("languages") or [])
+    tech = {re.sub(r"[^a-z0-9]", "", str(x).lower()) for x in names if " " not in str(x).strip()}
+    tech = {t for t in tech if len(t) >= 3}
+    boost = math.log(500 * math.log(n))
+    for t in tech:
+        lm._wordcost[t] = min(lm._wordcost.get(t, 99.0), boost)
+        lm._maxword = max(lm._maxword, len(t))
+    return lm, tech, math.log(60000 * math.log(n))
+
+
+def _real_word(p: str, lm, tech, common) -> bool:
+    if p.isdigit():
+        return True
+    w = p.lower()
+    if w in _SHORT_OK:
+        return True
+    return len(w) >= 3 and (w in tech or lm._wordcost.get(w, 99.0) <= common)
+
+
+def _unglue(token: str) -> str:
+    if sum(c.isalpha() for c in token) < _GLUED_MIN_LETTERS or not token.isalnum():
+        return token
+    model = _word_model()
+    if model is None:
+        return token
+    lm, tech, common = model
+    if _real_word(token, lm, tech, common):
+        return token
+    parts = lm.split(token)
+    if len(parts) > 1 and all(_real_word(p, lm, tech, common) for p in parts):
+        return " ".join(parts)
+    # names: split where the letter case changes ("GruveAIPrivateLimited")
+    if sum(c.isupper() for c in token) < 2:
+        return token
+    camel = re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+", token)
+    if len(camel) < 2 or any(len(c) < 2 and not c.isdigit() for c in camel):
+        return token
+    out: list[str] = []
+    for c in camel:
+        sub = lm.split(c) if len(c) >= 8 and not _real_word(c, lm, tech, common) else [c]
+        out += sub if all(_real_word(x, lm, tech, common) for x in sub) else [c]
+    return " ".join(out)
+
+
+_TOKEN = re.compile(r"[A-Za-z0-9]{%d,}" % _GLUED_MIN_LETTERS)
+
+
+def unglue_words(text: str) -> str:
+    """Puts spaces back into words a PDF glued together; everything else is left exactly as is."""
+    def fix(m: re.Match) -> str:
+        s, e = m.span()
+        before, after = text[s - 1:s], text[e:e + 1]
+        if before in "/@.:-_" and before or after in "/@._-" and after:
+            return m.group()               # part of a link, e-mail or file name
+        return _unglue(m.group())
+    return _TOKEN.sub(fix, text)
+
+
 def extract_pdf(data: bytes) -> Extracted:
     warnings: list[tuple[str, str]] = []
     try:
@@ -117,7 +212,7 @@ def extract_pdf(data: bytes) -> Extracted:
                 urls += [h.get("uri") for h in p.hyperlinks]
             except Exception:  # an odd link annotation must not break reading the text
                 pass
-        text = _clean("\n\n".join(texts) + _web_links(urls))
+        text = _clean(unglue_words("\n\n".join(texts)) + _web_links(urls))
         n = max(len(pages), 1)
     if len(text) < MIN_CHARS_PER_PAGE * n * 0.5:
         raise ExtractionError(

@@ -6,6 +6,7 @@ Every level above 0 must be backed by a quote that really exists in the resume.
 from __future__ import annotations
 
 import json
+import re
 import statistics
 
 from app.llm.base import LLMClient, LLMError
@@ -28,11 +29,25 @@ def build_input(jd: JobDescription, resume_text: str) -> str:
     return f"JOB DESCRIPTION:\n{jd_json}\n\nRESUME:\n<<<\n{resume_text}\n>>>"
 
 
+_WORD_LEVELS = (
+    (("exceed", "excellent", "outstanding", "full", "perfect", "very strong"), 100),
+    (("strong", "good", "high", "meets", "clear"), 75),
+    (("partial", "moderate", "medium", "some", "average"), 50),
+    (("weak", "little", "low", "slight", "limited"), 25),
+)
+
+
 def _snap(level) -> int:
+    """75, "75", "75%", "75/100", "Level 75" -> 75."""
     try:
         v = float(level)
     except (TypeError, ValueError):
-        return 0
+        m = re.search(r"\d+(?:\.\d+)?", str(level or ""))
+        if m:
+            v = float(m.group())
+        else:   # a model that answers in words ("exceeds expectations") instead of a number
+            w = str(level or "").lower()
+            v = next((lv for words, lv in _WORD_LEVELS if any(x in w for x in words)), 0)
     return min(LEVELS, key=lambda lv: (abs(lv - v), lv))  # ties go to the lower level
 
 
@@ -45,7 +60,7 @@ def parse_reply(data: dict, resume_text: str) -> dict[str, dict]:
         if key not in LABELS or key in out:
             continue
         quotes = [q for q in (d.get("evidence") or []) if isinstance(q, str) and q.strip()]
-        valid = [q for q in quotes if found_in_source(q, src)]
+        valid = [q for q in quotes if found_in_source(q, src, loose=True)]
         level = _snap(d.get("level"))
         reason = str(d.get("reason") or "").strip()
         if level > 0 and not valid:

@@ -161,10 +161,50 @@ def _relations() -> dict:
 
 
 def shown_by(skill: str) -> list[str]:
-    """Skills whose use also shows this one: JavaScript <- TypeScript, Node.js, React..."""
+    """Skills whose use also shows this one: JavaScript <- TypeScript, Node.js, React...
+    For a concept (System Design, Async Programming) also the words that show it in a bullet."""
     want = canonical(skill).lower()
-    return [k for k, v in (_relations().get("implies") or {}).items()
-            if any(canonical(x).lower() == want for x in (v or []))]
+    out = [k for k, v in (_relations().get("implies") or {}).items()
+           if any(canonical(x).lower() == want for x in (v or []))]
+    for concept, terms in (_relations().get("concepts") or {}).items():
+        if canonical(concept).lower() == want:
+            out += [t for t in (terms or []) if t not in out]
+    return out
+
+
+def family(skill: str) -> str | None:
+    """'language', 'cloud', 'database', ... (config/skill_relations.yaml), or None if unknown."""
+    if is_language(skill):
+        return "language"
+    want = canonical(skill).lower()
+    for name, members in (_relations().get("families") or {}).items():
+        if any(canonical(m).lower() == want for m in (members or [])):
+            return name
+    return None
+
+
+def split_mixed(skill: str) -> list[str]:
+    """A JD list of DIFFERENT kinds of things isn't "any one of them all":
+    'Go, Python, Java, Kubernetes, AWS or Azure' -> ['Go or Python or Java', 'Kubernetes', 'AWS or Azure'].
+    Two options ('Docker or Kubernetes'), options of one kind ('AWS, GCP or Azure') and
+    'N of ...' stay as they are."""
+    alts = alternatives(skill)
+    if len(alts) < 3 or needed_count(skill) > 1:
+        return [skill]
+    kinds = [family(a) for a in alts]
+    if len(set(kinds)) == 1 and kinds[0] is not None:
+        return [skill]                                  # all the same kind
+    if all(k is None for k in kinds):
+        return [skill]                                  # nothing known: keep what the JD said
+    groups: dict[str, list[str]] = {}
+    out_order: list[str] = []
+    for a, k in zip(alts, kinds):
+        key = k or f"_{a}"
+        if key not in groups:
+            groups[key] = []
+            out_order.append(key)
+        groups[key].append(a)
+    return [" or ".join(groups[k]) for k in out_order]
 
 
 def close_to(skill: str) -> list[str]:

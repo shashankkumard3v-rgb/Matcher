@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------- Resume ----------
@@ -71,6 +71,19 @@ class JobDescription(BaseModel):
     responsibilities: list[str] = Field(default_factory=list)
     languages: list[str] = Field(default_factory=list)  # spoken languages the JD requires
     capabilities: list[str] = Field(default_factory=list)  # ids from config/capabilities.yaml
+
+    @field_validator("must_have", "nice_to_have", mode="after")
+    @classmethod
+    def _split_mixed_lists(cls, v: list[str]) -> list[str]:
+        """'Go, Python, Java, Kubernetes, AWS or Azure' is one language AND Kubernetes AND one
+        cloud, not one of all six. Also fixes JDs saved before this rule existed."""
+        from app.scoring.synonyms import split_mixed
+        out: list[str] = []
+        for s in v:
+            for part in split_mixed(s):
+                if part.lower() not in {x.lower() for x in out}:
+                    out.append(part)
+        return out
 
 
 # ---------- Project context (your experience bank) ----------

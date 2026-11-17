@@ -52,4 +52,52 @@ languages: [Java, Go, C++, C#, C, Python, Ruby, Rust, Kotlin, Scala, PHP, JavaSc
 # this capitalization ("Node" the runtime, not "a graph node").
 aliases:
   Node.js: [Node]
+  Async Programming: [asynchronous programming, async programming, asynchronous processing, async processing]
+  Concurrency: [concurrent programming]
+  Event-Driven Architecture: [event driven architecture, event driven systems]
+  Data Structures and Algorithms: [DSA, data structures & algorithms]
 exact: [Node]
+
+# Kinds of tools. A JD line like "Go, Python, Java, Kubernetes, AWS or Azure" is a list of
+# DIFFERENT kinds of things: it means one of the languages, AND Kubernetes, AND one of the
+# clouds, not "any one of all six". Options of the same kind stay "any one of" (Kafka or RabbitMQ).
+families:
+  cloud: [AWS, Azure, GCP, Google Cloud, Oracle Cloud, IBM Cloud, DigitalOcean, Alibaba Cloud]
+  database: [PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, Cassandra, DynamoDB, MariaDB, CockroachDB,
+             Couchbase, Elasticsearch, Neo4j]
+  queue: [Kafka, RabbitMQ, SQS, Pulsar, Kinesis, NATS, ActiveMQ, Google Pub/Sub, Azure Service Bus]
+  orchestration: [Kubernetes, ECS, EKS, AKS, GKE, Nomad, OpenShift, Docker Swarm]
+  frontend: [React, Angular, Vue, Svelte, Next.js, Ember]
+  ci: [Jenkins, GitHub Actions, GitLab CI, CircleCI, Travis CI, Azure DevOps, Bitbucket Pipelines, ArgoCD]
+  iac: [Terraform, CloudFormation, Pulumi, Ansible, Chef, Puppet, CDK]
+  monitoring: [Prometheus, Grafana, Datadog, New Relic, Splunk, ELK, OpenTelemetry, CloudWatch]
+  cache: [Redis, Memcached]
+  backend_framework: [Spring Boot, Django, Flask, FastAPI, Express, NestJS, Rails, Laravel, ASP.NET, Gin]
+
+# Concepts are rarely written as one keyword: "System Design" shows in bullets about
+# microservices, distributed systems, architecture, scaling. A bullet with any of these words
+# counts as showing the concept (full credit, like "implies" above).
+concepts:
+  System Design: [system design, distributed systems, distributed system, microservices, microservice,
+                  architecture, architected, scalable, scalability, high availability, fault tolerant,
+                  fault tolerance, load balancing, sharding, event driven, designed and built, system architecture]
+  Distributed Systems: [distributed system, microservices, microservice, sharding, replication, consensus,
+                        event driven, Kafka, high availability, fault tolerant]
+  Async Programming: [async, asynchronous, asyncio, async await, non blocking, coroutines, coroutine,
+                      goroutines, goroutine, event loop, CompletableFuture, futures, promises, Celery,
+                      message queue, message queues, Kafka, RabbitMQ, SQS, event driven, background jobs,
+                      background workers, reactive, WebFlux, Tokio]
+  Concurrency: [concurrent, concurrency, multithreading, multi threaded, multithreaded, goroutines,
+                goroutine, threads, thread pool, parallel processing, locks, mutex, async, asynchronous,
+                asyncio, coroutines, CompletableFuture, event loop]
+  Event-Driven Architecture: [event driven, Kafka, RabbitMQ, SQS, SNS, pub sub, event sourcing, Kinesis, Pulsar]
+  Microservices: [microservice, microservices, service oriented, SOA]
+  Caching: [Redis, Memcached, cache, caching, CDN]
+  CI/CD: [GitHub Actions, Jenkins, GitLab CI, CircleCI, ArgoCD, continuous integration, continuous deployment,
+          continuous delivery, deployment pipeline, deployment pipelines]
+  Cloud: [AWS, Azure, GCP, Google Cloud]
+  Observability: [Prometheus, Grafana, Datadog, New Relic, OpenTelemetry, monitoring, alerting, tracing, ELK]
+  Performance Optimization: [latency, throughput, optimized, optimised, p99, p95, performance tuning, profiling]
+  Scalability: [scalable, scaled, scaling, horizontal scaling, autoscaling, high traffic, millions of]
+  Data Structures and Algorithms: [algorithm, algorithms, data structures, LeetCode, competitive programming]
+  API Design: [REST, RESTful, GraphQL, gRPC, API, APIs, OpenAPI]
