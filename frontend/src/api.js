@@ -92,6 +92,7 @@ export const api = {
   gateSkip: (id, qid) => request("POST", `${R(id)}/gate/skip/${encodeURIComponent(qid)}`),
   gateContext: (id, text) => request("POST", `${R(id)}/gate/context`, { text }),
   gateProposal: (id, pid, accept) => request("POST", `${R(id)}/gate/proposals/${encodeURIComponent(pid)}`, { accept }),
+  gateProposalChat: (id, pid, text) => request("POST", `${R(id)}/gate/proposals/${encodeURIComponent(pid)}/revise`, { text }),
   gateOverride: (id, target, reason) => request("POST", `${R(id)}/gate/override`, { target, reason }),
   gateDecide: (id, decision, reason = "") => request("POST", `${R(id)}/gate/decide`, { decision, reason }),
 
@@ -103,6 +104,7 @@ export const api = {
   loopSkip: (id, qid) => request("POST", `${R(id)}/loop/skip/${encodeURIComponent(qid)}`),
   loopContext: (id, text) => request("POST", `${R(id)}/loop/context`, { text }),
   loopProposal: (id, pid, accept) => request("POST", `${R(id)}/loop/proposals/${encodeURIComponent(pid)}`, { accept }),
+  loopProposalChat: (id, pid, text) => request("POST", `${R(id)}/loop/proposals/${encodeURIComponent(pid)}/revise`, { text }),
   loopNotes: (id, text) => request("POST", `${R(id)}/loop/notes`, { text }),
   loopSuggest: (id) => request("POST", `${R(id)}/loop/suggest`),
   loopChange: (id, cid, action, extra = {}) =>

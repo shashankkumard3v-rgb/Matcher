@@ -316,6 +316,24 @@ async def add_context(llm: LLMClient, d: Path, text: str) -> LoopState:
     return s
 
 
+async def revise_proposal(llm: LLMClient, d: Path, pid: str, message: str) -> LoopState:
+    """Chat with a draft before saving it: the AI redoes it with what you said."""
+    s = _require(d)
+    prop = next((p for p in s.proposals if p.id == pid), None)
+    if prop is None:
+        raise LoopError("no_proposal", f"No proposal '{pid}'.")
+    if prop.status != "pending":
+        raise LoopError("not_pending", f"Proposal is already {prop.status}.")
+    if not message or not message.strip():
+        raise LoopError("empty_message", "Say what to change.")
+    new = await updater.revise(llm, prop, message, load_version(d, s.current_version))
+    if new.action == "none":
+        raise LoopError("revise_failed", new.summary or "The AI couldn't redo it with that. Try saying it differently.")
+    s.proposals[s.proposals.index(prop)] = new
+    save_state(d, s)
+    return s
+
+
 def resolve_proposal(d: Path, pid: str, accept: bool, edited: ContextProposal | None = None) -> LoopState:
     s = _require(d)
     prop = next((p for p in s.proposals if p.id == pid), None)

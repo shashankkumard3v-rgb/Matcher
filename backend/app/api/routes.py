@@ -301,6 +301,15 @@ async def gate_proposal(run_id: str, proposal_id: str, body: ProposalBody):
         raise _gate_errors(e)
 
 
+@router.post("/runs/{run_id}/gate/proposals/{proposal_id}/revise", response_model=GateState)
+async def gate_proposal_revise(run_id: str, proposal_id: str, body: TextBody, llm: LLMClient = Depends(get_llm)):
+    """Tell the AI what to change in a draft before saving it."""
+    try:
+        return await gate_mod.revise_proposal(llm, _run(run_id), proposal_id, body.text)
+    except Exception as e:
+        raise _gate_errors(e)
+
+
 @router.post("/runs/{run_id}/gate/override", response_model=GateState)
 async def gate_override(run_id: str, body: OverrideBody):
     """Switch off a knockout, or the whole verdict."""
@@ -425,6 +434,12 @@ async def loop_context(run_id: str, body: TextBody, llm: LLMClient = Depends(get
 @router.post("/runs/{run_id}/loop/proposals/{proposal_id}", response_model=LoopState)
 async def loop_proposal(run_id: str, proposal_id: str, body: ProposalBody):
     return await _loop_call(loop_mod.resolve_proposal, _run(run_id), proposal_id, body.accept, body.edited)
+
+
+@router.post("/runs/{run_id}/loop/proposals/{proposal_id}/revise", response_model=LoopState)
+async def loop_proposal_revise(run_id: str, proposal_id: str, body: TextBody, llm: LLMClient = Depends(get_llm)):
+    """Tell the AI what to change in a draft before saving it."""
+    return await _loop_call(loop_mod.revise_proposal, llm, _run(run_id), proposal_id, body.text)
 
 
 @router.post("/runs/{run_id}/loop/notes", response_model=LoopState)

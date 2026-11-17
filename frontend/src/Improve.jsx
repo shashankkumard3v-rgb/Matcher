@@ -169,7 +169,39 @@ function Questions({ questions, onAnswer, onSkip }) {
   );
 }
 
-function Proposals({ proposals, onResolve }) {
+// A draft of new facts for your notes. Before saving you can chat with it: tell the AI what to
+// change ("it was at Yanolja", "make it shorter", "add that it handled 5M events/day") as many
+// times as you like. Facts only count when YOU wrote them.
+function ProposalChat({ p, busy, onChat }) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  async function send() {
+    const t = text.trim();
+    if (!t || sending) return;
+    setSending(true);
+    try { if (await onChat(p.id, t)) setText(""); } finally { setSending(false); }
+  }
+  return (
+    <div className="stack-sm proposal-chat">
+      {p.chat?.length > 0 && (
+        <ul className="chat-log small">
+          {p.chat.map((m, i) => <li key={i}><span className="muted">You:</span> {m}</li>)}
+        </ul>
+      )}
+      <textarea className="editor qa-input" rows={2} value={text} disabled={sending}
+                placeholder="Tell the AI what to change, e.g. it was at Yanolja, 2023 to 2024 · make it shorter · add that it handled 5M events/day"
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send(); }} />
+      <div>
+        <button className="btn" disabled={!text.trim() || sending || !!busy} onClick={send}>
+          {sending ? "Updating the draft…" : "Update draft"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Proposals({ proposals, onResolve, onChat, busy }) {
   const [sending, setSending] = useState({});
   const chain = useRef(Promise.resolve());
   const pending = proposals.filter((p) => p.status === "pending");
@@ -194,7 +226,9 @@ function Proposals({ proposals, onResolve }) {
           {p.project && (
             <ul className="evidence small">
               {[...(p.project.what_i_did || []), ...(p.project.results || [])].map((x, i) => <li key={i}>{x}</li>)}
-              {p.project.employer && <li className="muted">at {p.project.employer}</li>}
+              {(p.project.role || p.project.start) && (
+                <li className="muted">{[p.project.role, [p.project.start, p.project.end].filter(Boolean).join(" – ")].filter(Boolean).join(" · ")}</li>
+              )}
             </ul>
           )}
           {p.profile && (
@@ -206,6 +240,7 @@ function Proposals({ proposals, onResolve }) {
           {p.missing_info?.length > 0 && (
             <div className="small muted">Would help to know: {p.missing_info.join(", ")}</div>
           )}
+          {onChat && <ProposalChat p={p} busy={sending[p.id] || busy} onChat={onChat} />}
           <div className="row wrap">
             <button className="btn btn-primary" disabled={!!sending[p.id]} onClick={() => send(p.id, true)}>
               {sending[p.id] === "save" ? "Saving…" : "Save"}
@@ -352,7 +387,8 @@ function GateCard({ runId, gate, setGate, loop, onStarted }) {
             onSkip={(qid) => a.run("Skipping…", () => set(api.gateSkip(runId, qid)))}
           />
           <Proposals proposals={gate.proposals}
-                     onResolve={(pid, ok) => a.run("Saving…", () => set(api.gateProposal(runId, pid, ok)))} />
+                     onResolve={(pid, ok) => a.run("Saving…", () => set(api.gateProposal(runId, pid, ok)))}
+                     onChat={(pid, text) => a.run("Updating the draft…", () => set(api.gateProposalChat(runId, pid, text)).then(() => true))} />
           <AddContext busy={a.busy}
                       onAdd={(text) => a.run("Reading…", () => set(api.gateContext(runId, text)).then(() => true))} />
           {gate.needs_recompute && (
@@ -689,7 +725,8 @@ function LoopCard({ runId, loop, setLoop, setExport }) {
                 onSkip={(qid) => a.run("Skipping…", () => set(api.loopSkip(runId, qid)))}
               />
               <Proposals proposals={loop.proposals.filter((p) => r.proposal_ids.includes(p.id))}
-                         onResolve={(pid, ok) => a.run("Saving…", () => set(api.loopProposal(runId, pid, ok)))} />
+                         onResolve={(pid, ok) => a.run("Saving…", () => set(api.loopProposal(runId, pid, ok)))}
+                         onChat={(pid, text) => a.run("Updating the draft…", () => set(api.loopProposalChat(runId, pid, text)).then(() => true))} />
               <AddContext busy={a.busy}
                           onAdd={(text) => a.run("Reading…", () => set(api.loopContext(runId, text)).then(() => true))} />
               <details className="small">

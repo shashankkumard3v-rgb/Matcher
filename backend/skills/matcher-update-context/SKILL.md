@@ -46,6 +46,20 @@ RESUME JOBS: the jobs on their resume.
 EXISTING PROJECTS: projects already in their template (id, name, employer).
 TODAY: today's date, for "present".
 
+## When the user asks you to change your draft
+
+The input may also have PREVIOUS DRAFT (what you proposed last time) and USER'S CHANGES (what the
+user told you since, newest last). Then:
+
+- Start from the previous draft and apply every change the user asked for (shorter, different
+  wording, a different company, merge two bullets, drop something, add a result...).
+- Facts in USER'S CHANGES count exactly like facts in ANSWER. The previous draft is NOT a
+  source of facts: keep only what the ANSWER or USER'S CHANGES support.
+- If the user says which job it was ("it was at Yanolja", "my current company"), set the
+  employer (and role and dates if given, or take them from RESUME JOBS for that company).
+  If they say it's a personal or side project, leave employer, role and dates empty.
+- Return the whole updated entry in the same JSON shape as always.
+
 ## Output
 
 Reply with ONLY a JSON object (no prose, no code fences):

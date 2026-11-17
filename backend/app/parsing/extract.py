@@ -110,62 +110,96 @@ def page_text(page) -> str:
 
 
 # Last resort for words a PDF glued together with NO gap at all ("softwaredevelopmentengineer2"):
-# split long glued tokens back into words with a dictionary (wordninja), boosted with the tech
-# names Matcher knows (Kubernetes, PostgreSQL ...). A split is kept only when every piece is a
-# real word, so normal long words ("internationalization", "Elasticsearch") and names/usernames
-# stay as they are.
+# split long glued tokens back into words using English word frequencies (the wordsegment
+# package's word list), boosted with the tech names Matcher knows (Kubernetes, PostgreSQL ...).
+# A split is kept only when every piece is a real word, so normal long words
+# ("internationalization", "Elasticsearch") and names/usernames stay as they are.
 _SHORT_OK = {"a", "i", "an", "of", "to", "in", "on", "at", "by", "as", "is", "or", "we", "be", "it", "up",
              "my", "me", "us", "so", "no", "do", "go", "ai", "ml", "ui", "ux", "qa", "ci", "cd", "os", "db",
              "ii", "iii", "iv"}
 _GLUED_MIN_LETTERS = 15
+_MAX_WORD = 30
+_COMMON_RANK = 60000          # a "real word" is among the 60,000 most used (or a known tech name)
 
 
 @lru_cache(maxsize=1)
-def _word_model():
+def _word_costs():
+    """{word: cost} (lower = more common) and the cost limit of a real word. None if the word
+    list isn't installed (then nothing is split: run "pip install -r requirements.txt")."""
     try:
-        import wordninja
-    except ImportError:          # not installed yet: run "pip install -r requirements.txt"
+        import wordsegment
+    except ImportError:
         return None
+    # read only the word list (not the much bigger word-pair list wordsegment.load() also reads),
+    # and keep the 150,000 most used words: plenty for resumes, and light on memory
+    path = Path(wordsegment.__file__).parent / "unigrams.txt"
+    counts: list[tuple[str, float]] = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            w, _, c = line.partition("\t")
+            if c and len(w) <= _MAX_WORD:
+                counts.append((w, float(c)))
+    counts.sort(key=lambda x: -x[1])
+    total = sum(c for _, c in counts)
+    real_limit = math.log(total / counts[min(_COMMON_RANK, len(counts)) - 1][1])
+    boost = math.log(total / counts[500][1])               # as common as a top-500 word
+    costs = {w: math.log(total / c) for w, c in counts[:150000]}
+    del counts
     from app.scoring.synonyms import _relations, synonym_table
-    lm = wordninja.LanguageModel.__new__(wordninja.LanguageModel)     # own copy, the default stays untouched
-    lm._wordcost = dict(wordninja.DEFAULT_LANGUAGE_MODEL._wordcost)
-    lm._maxword = wordninja.DEFAULT_LANGUAGE_MODEL._maxword
-    n = len(lm._wordcost)
-    names = [a for a in synonym_table()[1]]
+    names = list(synonym_table()[1])
     rel = _relations()
     for sec in ("implies", "close", "families"):
         for k, v in (rel.get(sec) or {}).items():
             names += [k] + (list(v) if isinstance(v, list) else [])
     names += list(rel.get("languages") or [])
-    tech = {re.sub(r"[^a-z0-9]", "", str(x).lower()) for x in names if " " not in str(x).strip()}
-    tech = {t for t in tech if len(t) >= 3}
-    boost = math.log(500 * math.log(n))
-    for t in tech:
-        lm._wordcost[t] = min(lm._wordcost.get(t, 99.0), boost)
-        lm._maxword = max(lm._maxword, len(t))
-    return lm, tech, math.log(60000 * math.log(n))
+    for x in names:
+        if " " in str(x).strip():
+            continue
+        t = re.sub(r"[^a-z0-9]", "", str(x).lower())
+        if 3 <= len(t) <= _MAX_WORD:
+            costs[t] = min(costs.get(t, 99.0), boost)
+    return costs, real_limit
 
 
-def _real_word(p: str, lm, tech, common) -> bool:
+def _real_word(p: str, costs: dict, limit: float) -> bool:
     if p.isdigit():
         return True
     w = p.lower()
-    if w in _SHORT_OK:
-        return True
-    return len(w) >= 3 and (w in tech or lm._wordcost.get(w, 99.0) <= common)
+    return w in _SHORT_OK or (len(w) >= 3 and costs.get(w, 99.0) <= limit)
+
+
+def _split_words(token: str, costs: dict) -> list[str]:
+    """Most likely words for a token with no spaces (original letter case kept)."""
+    low = token.lower()
+    n = len(low)
+    best = [(0.0, 0)] + [(math.inf, 0)] * n          # (cost up to i, start of the last word)
+    for i in range(1, n + 1):
+        for j in range(max(0, i - _MAX_WORD), i):
+            piece = low[j:i]
+            c = 2.0 if piece.isdigit() else costs.get(piece)
+            if c is not None and best[j][0] + c < best[i][0]:
+                best[i] = (best[j][0] + c, j)
+    if best[n][0] == math.inf:
+        return [token]
+    out, i = [], n
+    while i > 0:
+        j = best[i][1]
+        out.append(token[j:i])
+        i = j
+    return out[::-1]
 
 
 def _unglue(token: str) -> str:
     if sum(c.isalpha() for c in token) < _GLUED_MIN_LETTERS or not token.isalnum():
         return token
-    model = _word_model()
+    model = _word_costs()
     if model is None:
         return token
-    lm, tech, common = model
-    if _real_word(token, lm, tech, common):
+    costs, limit = model
+    if _real_word(token, costs, limit):
         return token
-    parts = lm.split(token)
-    if len(parts) > 1 and all(_real_word(p, lm, tech, common) for p in parts):
+    parts = _split_words(token, costs)
+    if len(parts) > 1 and all(_real_word(p, costs, limit) for p in parts):
         return " ".join(parts)
     # names: split where the letter case changes ("GruveAIPrivateLimited")
     if sum(c.isupper() for c in token) < 2:
@@ -175,8 +209,8 @@ def _unglue(token: str) -> str:
         return token
     out: list[str] = []
     for c in camel:
-        sub = lm.split(c) if len(c) >= 8 and not _real_word(c, lm, tech, common) else [c]
-        out += sub if all(_real_word(x, lm, tech, common) for x in sub) else [c]
+        sub = _split_words(c, costs) if len(c) >= 8 and not _real_word(c, costs, limit) else [c]
+        out += sub if all(_real_word(x, costs, limit) for x in sub) else [c]
     return " ".join(out)
 
 

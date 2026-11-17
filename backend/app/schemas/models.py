@@ -193,6 +193,8 @@ class ContextProposal(BaseModel):
     missing_info: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     status: str = "pending"           # pending | accepted | rejected
+    question: Optional[str] = None    # the question it answers, if any
+    chat: list[str] = Field(default_factory=list)   # what you told the AI to change, in order
 
 
 # ---------- Step 3: apply gate ----------

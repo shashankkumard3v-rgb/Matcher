@@ -76,7 +76,7 @@ def _find(ctx: ProjectContext, project_id: str | None, name: str | None) -> Proj
 
 
 def build_input(answer: str, question: str | None, resume: Resume, ctx: ProjectContext,
-                today: date | None = None) -> str:
+                today: date | None = None, previous: str | None = None, chat: list[str] | None = None) -> str:
     jobs = [{"title": j.title, "company": j.company, "start": j.start, "end": j.end}
             for j in resume.experience]
     projects = [{"id": p.id, "name": p.name, "employer": p.employer} for p in ctx.projects]
@@ -86,19 +86,25 @@ def build_input(answer: str, question: str | None, resume: Resume, ctx: ProjectC
         + f"RESUME JOBS: {json.dumps(jobs, ensure_ascii=False)}\n"
         + f"EXISTING PROJECTS: {json.dumps(projects, ensure_ascii=False)}\n"
         + f"TODAY: {(today or date.today()).isoformat()}"
+        + (f"\nPREVIOUS DRAFT (your last proposal; rewrite it as the user asks below):\n{previous}" if previous else "")
+        + ("\nUSER'S CHANGES (newest last; new facts here count like the ANSWER, instructions change the draft):\n"
+           + "\n".join(f"- {m}" for m in chat) if chat else "")
     )
 
 
 async def propose(llm: LLMClient, answer: str, resume: Resume, *, question: str | None = None,
-                  source: str = "free_text") -> ContextProposal:
+                  source: str = "free_text", previous: str | None = None,
+                  chat: list[str] | None = None) -> ContextProposal:
     ctx = parse_project_context(_read_template())
-    data = await llm.run_skill(SKILL, build_input(answer, question, resume, ctx))
+    data = await llm.run_skill(SKILL, build_input(answer, question, resume, ctx, previous=previous, chat=chat))
+    said = answer + "\n" + "\n".join(chat or [])      # everything YOU wrote: the only source of facts
     if not isinstance(data, dict):
         raise LLMError("update-context reply was not a JSON object")
     action = data.get("action") or "none"
     warnings: list[str] = []
     prop = ContextProposal(
         id=uuid.uuid4().hex[:10], source=source, user_text=answer, action=action,
+        question=question, chat=list(chat or []),
         summary=str(data.get("summary") or ""),
         missing_info=[str(x) for x in (data.get("missing_info") or [])][:3],
     )
@@ -113,9 +119,14 @@ async def propose(llm: LLMClient, answer: str, resume: Resume, *, question: str 
         raw.setdefault("name", "Untitled project")
         raw["name"] = raw["name"] or "Untitled project"
         existing = _find(ctx, data.get("target_project_id"), raw.get("name"))
-        allowed = _numbers(answer) | _numbers(json.dumps(existing.model_dump() if existing else {}))
+        allowed = _numbers(said) | _numbers(json.dumps(existing.model_dump() if existing else {}))
         for f in ("what_i_did", "results"):
             raw[f] = _drop_unsaid_numbers([str(x) for x in raw.get(f) or []], allowed, warnings)
+        # a fragment ("at Yanolja", "Kafka") isn't a bullet
+        short = [x for x in raw.get("what_i_did") or [] if len(x.split()) < 4]
+        if short:
+            raw["what_i_did"] = [x for x in raw["what_i_did"] if x not in short]
+            warnings.append("Left out fragments that aren't full bullets: " + ", ".join(f'"{x}"' for x in short) + ".")
         if raw.get("team_size") and _numbers(str(raw["team_size"])) - allowed:
             warnings.append(f"Removed team size \"{raw['team_size']}\": you didn't say it.")
             raw["team_size"] = None
@@ -126,8 +137,11 @@ async def propose(llm: LLMClient, answer: str, resume: Resume, *, question: str 
         prop.project = merged
         prop.before = render_project_block(existing) if existing else ""
         prop.after = render_project_block(merged)
-        issues = [i.message for i in parse_project_context(prop.after).issues]
-        prop.warnings = warnings + issues
+        missing = [i.field for i in parse_project_context(prop.after).issues]
+        if missing:   # one plain line, not one warning per field
+            warnings.append("Not given yet: " + ", ".join(dict.fromkeys(missing)) + ". Tell me below "
+                            "(\"it was at <company>, <role>, 2023 to 2024\", or \"it's a personal project\").")
+        prop.warnings = warnings
     elif action == "add_profile" and data.get("profile"):
         new = Profile(**{k: [str(x) for x in v] for k, v in data["profile"].items()
                          if k in ("languages", "facts", "links") and isinstance(v, list)})
@@ -141,6 +155,17 @@ async def propose(llm: LLMClient, answer: str, resume: Resume, *, question: str 
         prop.status = "rejected"  # nothing to apply
         prop.warnings = warnings
     return prop
+
+
+async def revise(llm: LLMClient, prop: ContextProposal, message: str, resume: Resume) -> ContextProposal:
+    """You tell the AI what to change ("it was at Yanolja", "make it shorter", "add that I led 3
+    people"): it redoes the draft. New facts count only because YOU wrote them; the earlier
+    draft is just a starting point, never a source of facts."""
+    chat = prop.chat + [message.strip()]
+    new = await propose(llm, prop.user_text, resume, question=prop.question, source=prop.source,
+                        previous=prop.after or None, chat=chat)
+    new.id = prop.id
+    return new
 
 
 def apply(prop: ContextProposal) -> ProjectContext:

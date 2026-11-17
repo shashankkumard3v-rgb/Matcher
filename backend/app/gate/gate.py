@@ -349,6 +349,24 @@ def skip(d: Path, question_id: str) -> GateState:
     return state
 
 
+async def revise_proposal(llm: LLMClient, d: Path, pid: str, message: str) -> GateState:
+    """Chat with a draft before saving it: the AI redoes it with what you said."""
+    state = _require(d)
+    prop = next((p for p in state.proposals if p.id == pid), None)
+    if prop is None:
+        raise GateError("no_proposal", f"No proposal '{pid}'.")
+    if prop.status != "pending":
+        raise GateError("not_pending", f"Proposal is already {prop.status}.")
+    if not message or not message.strip():
+        raise GateError("empty_message", "Say what to change.")
+    new = await updater.revise(llm, prop, message, runs.load_resume(d))
+    if new.action == "none":
+        raise GateError("revise_failed", new.summary or "The AI couldn't redo it with that. Try saying it differently.")
+    state.proposals[state.proposals.index(prop)] = new
+    save_state(d, state)
+    return state
+
+
 async def add_context(llm: LLMClient, d: Path, text: str) -> GateState:
     state = _require(d)
     prop = await updater.propose(llm, text, runs.load_resume(d), source="free_text")
