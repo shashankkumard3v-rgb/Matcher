@@ -34,6 +34,7 @@ SKILL_STEP = {
     "matcher-fit": "improve",
     "matcher-truth-check": "truth_check",
     "matcher-profile-resume": "score",   # strict, careful model settings (like the judge)
+    "matcher-find-evidence": "improve",  # reads your notes for missing requirements
 }
 
 

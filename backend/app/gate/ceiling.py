@@ -139,7 +139,7 @@ def _select(r: Resume, pools: list[list[str]], caps: list[int], jd: JobDescripti
 
 
 def build_ceiling_resume(resume: Resume, ctx: ProjectContext, jd: JobDescription | None = None,
-                         cfg: dict | None = None) -> Resume:
+                         cfg: dict | None = None, found: list | None = None) -> Resume:
     """Your resume + the facts from your notes and template, as one honest page.
 
     With a JD, each job keeps at most its one-page number of bullets (cfg max_bullets_per_job),
@@ -159,6 +159,12 @@ def build_ceiling_resume(resume: Resume, ctx: ProjectContext, jd: JobDescription
             r.projects.append(ResumeProject(
                 name=p.name, description=p.problem, bullets=list(p.what_i_did) + list(p.results),
                 tech=list(p.tech)))
+
+    # Requirements your notes show in other words (the AI found them, code checked them): the
+    # bullet written from those lines names the requirement, so it goes first in that job's pool.
+    for f in found or []:
+        if 0 <= f.job < len(pools):
+            pools[f.job].append(f.bullet)
 
     # Experience notes: a line under one of your companies goes to that job; the rest becomes a
     # "From your notes" project. Words are kept as written (no rewriting here).

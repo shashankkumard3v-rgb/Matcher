@@ -20,6 +20,7 @@ from app import runs
 from app.config import weights_config
 from app.context import updater
 from app.loop import bullets as bullets_mod
+from app.loop import guard
 from app.loop import split as split_mod
 from app.gate import gate as gate_mod
 from app.llm.base import LLMClient
@@ -45,7 +46,7 @@ from app.scoring.scorer import score_resume
 
 SKILL = "matcher-improve"
 FIT_SKILL = "matcher-fit"
-KINDS = {"replace_bullet", "add_bullet", "remove_bullet", "merge_bullets", "set_summary",
+KINDS = {"replace_bullet", "add_bullet", "remove_bullet", "merge_bullets", "set_summary", "add_skill",
          "add_achievement", "remove_achievement"}
 
 
@@ -212,12 +213,19 @@ def _cap_check(resume: Resume, changes: list[Change], cfg: dict) -> None:
                 count[c.job] += 1
 
 
+def _found(d: Path, resume: Resume) -> list:
+    """Requirements your notes show (found at the gate) that this version still doesn't."""
+    from app.gate import evidence
+    return evidence.still_needed(evidence.load(d), resume)
+
+
 def _open_round(d: Path, s: LoopState) -> None:
     resume = load_version(d, s.current_version)
     score = _load_score(d, s, s.current_version)
     ctx = load_project_context()
-    problems = diagnose(score, resume, runs.load_jd(d), ctx)
-    problems += bullet_problems(bullets_mod.analyze(resume, runs.load_jd(d), score, _cfg()))
+    found = _found(d, resume)
+    problems = diagnose(score, resume, runs.load_jd(d), ctx, found=found)
+    problems += bullet_problems(bullets_mod.analyze(resume, runs.load_jd(d), score, _cfg(), found=found))
     asked = {q.id for r in s.rounds for q in r.questions if q.status in ("answered", "skipped")}
     qs = make_questions(problems, resume, runs.load_jd(d), ctx, asked,
                         int(_cfg().get("max_questions_per_round", 5)))
@@ -355,10 +363,10 @@ def _template_view(ctx: ProjectContext) -> dict:
 
 
 def _build_input(jd: JobDescription, resume: Resume, ctx: ProjectContext, r: Round, cfg: dict,
-                 feedback: str | None = None, change: Change | None = None) -> str:
+                 feedback: str | None = None, change: Change | None = None, found: list | None = None) -> str:
     problems = [p.model_dump(include={"id", "label", "points_lost", "cause", "fix_by", "detail"})
                 for p in r.problems if p.fix_by != "none"]
-    rep = bullets_mod.analyze(resume, jd, None, cfg)
+    rep = bullets_mod.analyze(resume, jd, None, cfg, found=found)
     parts = [
         "JD:\n" + json.dumps(jd.model_dump(), ensure_ascii=False, indent=1),
         "RESUME:\n" + json.dumps(_resume_view(resume), ensure_ascii=False, indent=1),
@@ -416,6 +424,9 @@ def _to_change(raw: dict, cid: str, resume: Resume) -> Change | None:
     if kind == "set_summary":
         c.old, c.job, c.bullet = resume.summary, None, None
         return c if c.new else None
+    if kind == "add_skill":
+        c.old, c.job, c.bullet, c.job_label = None, None, None, "Skills"
+        return c if c.new and len(c.new) <= 40 else None
     if not isinstance(c.job, int) or not (0 <= c.job < len(resume.experience)):
         return None
     job = resume.experience[c.job]
@@ -471,8 +482,10 @@ async def _checks(llm: LLMClient, d: Path, s: LoopState, changes: list[Change], 
                   ctx: ProjectContext) -> None:
     resume_texts = [render_resume(load_version(d, 0)), render_resume(load_version(d, s.current_version))]
     tpl = template_text(ctx)
+    from app.gate import evidence
+    confirmed = evidence.load(d)
     for c in changes:
-        check_code(c, resume_texts, tpl, jd)
+        check_code(c, resume_texts, tpl, jd, confirmed=confirmed)
     await check_ai(llm, changes)
 
 
@@ -485,10 +498,11 @@ async def suggest(llm: LLMClient, d: Path) -> LoopState:
     resume, jd, ctx = load_version(d, s.current_version), runs.load_jd(d), load_project_context()
     if _suggest_mode(cfg) == "split" and r.purpose != "fit":
         # plan first (keep / reword / merge / remove / add), then reword and write in small calls
-        raws, r.plan = await split_mod.suggest(llm, resume, jd, _load_score(d, s, s.current_version), r, cfg)
+        raws, r.plan = await split_mod.suggest(llm, resume, jd, _load_score(d, s, s.current_version), r, cfg,
+                                               found=_found(d, resume))
         limit = len(raws)
     else:
-        data = await llm.run_skill(_skill_for(r), _build_input(jd, resume, ctx, r, cfg))
+        data = await llm.run_skill(_skill_for(r), _build_input(jd, resume, ctx, r, cfg, found=_found(d, resume)))
         raws = data.get("changes", []) if isinstance(data, dict) else []
         limit = int(cfg.get("max_changes_per_round", 10))
     kept = [c for c in r.changes if c.status in ("accepted", "rejected")]
@@ -497,9 +511,15 @@ async def suggest(llm: LLMClient, d: Path) -> LoopState:
     new = [c for i, raw in enumerate(raws[:limit])
            if isinstance(raw, dict) and (c := _to_change(raw, f"r{r.n}c{start_n + i}", resume))
            and (c.kind, c.job, _norm(c.old or ""), _norm(c.new or "")) not in kept_keys]
+    if r.purpose != "fit":
+        new += [c for c in guard.skill_edits(resume, jd, _found(d, resume), start_n + len(raws[:limit]),
+                                               f"r{r.n}c", planned=new + kept)
+                if (c.kind, c.job, _norm(c.old or ""), _norm(c.new or "")) not in kept_keys]
     if not new and not kept:
         raise LoopError("no_suggestions", "The AI had no safe edits to suggest. Add context or answer questions first.")
     await _checks(llm, d, s, new, jd, ctx)
+    guard.review(resume, jd, new)
+    guard.clashes(new)
     for c in new:
         c.from_notes = next((x for x in (bullets_mod._notes_section(src.quote) for src in c.sources
                                           if src.type in ("notes", "template") and src.quote) if x), None)
@@ -540,11 +560,13 @@ async def change_action(llm: LLMClient, d: Path, cid: str, action: str, text: st
         probe = c.model_copy(deep=True)
         probe.status = "pending"
         check_code(probe, [render_resume(load_version(d, 0)), render_resume(load_version(d, s.current_version))],
-                   template_text(load_project_context()), runs.load_jd(d))
+                   template_text(load_project_context()), runs.load_jd(d),
+                   confirmed=__import__("app.gate.evidence", fromlist=["load"]).load(d))
         c.sources.append(ChangeSource(type="you", quote=c.new, verified=True))
         c.truth_ok = True
         c.truth_issues = ([f"Your own wording. Note: {i}" for i in probe.truth_issues]
                           if probe.truth_issues else [])
+        guard.review(load_version(d, s.current_version), runs.load_jd(d), [c], by_you=True)
         c.status = "accepted"
     elif action == "revise":
         if not feedback or not feedback.strip():
@@ -557,6 +579,7 @@ async def change_action(llm: LLMClient, d: Path, cid: str, action: str, text: st
             raise LoopError("revise_failed", "The AI couldn't produce a valid revision. Try different feedback.")
         redo.feedback_history = c.feedback_history + [feedback.strip()]
         await _checks(llm, d, s, [redo], jd, ctx)
+        guard.review(resume, jd, [redo])
         redo.from_notes = next((x for x in (bullets_mod._notes_section(src.quote) for src in redo.sources
                                              if src.type in ("notes", "template") and src.quote) if x), None)
         _lines_delta(r, [redo])
@@ -577,6 +600,10 @@ def apply_changes(resume: Resume, changes: list[Change]) -> Resume:
     for c in changes:
         if c.kind == "set_summary":
             out.summary = c.new
+            continue
+        if c.kind == "add_skill":
+            if c.new and _norm(c.new) not in {_norm(x) for x in out.skills}:
+                out.skills.append(c.new)
             continue
         if c.kind == "add_achievement":
             out.achievements.append(c.new)
@@ -606,9 +633,15 @@ def apply_changes(resume: Resume, changes: list[Change]) -> Resume:
 def _flags(s: LoopState, cfg: dict) -> None:
     r = s.rounds[-1]
     flags, rec = [], ""
-    if r.score_after is not None and r.score_after < r.score_before:
+    noise = float(cfg.get("score_noise", 1.0))   # the AI judge's grade varies a little between reads
+    if r.score_after is not None and r.score_after < r.score_before - noise:
         flags.append("score_dropped")
         rec = f"Score went down ({r.score_before} -> {r.score_after}). Rolling back to v{r.base_version} is recommended."
+    elif r.score_after is not None and abs(r.score_after - r.score_before) <= noise and r.result_version is not None:
+        flags.append("no_real_change")
+        rec = (f"{r.score_before} -> {r.score_after} is within the AI judge's normal variation (±{noise:g}), "
+               "so this round didn't really change the score. Use \"Score again\" (3 reads) to be sure, "
+               "or try different edits.")
     if r.score_after is not None and r.score_after >= s.target:
         flags.append("target_reached")
         rec = rec or f"Target reached ({r.score_after}). You can finish, or keep polishing."

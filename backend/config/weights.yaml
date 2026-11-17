@@ -32,6 +32,7 @@ gate:
 loop:
   max_iterations: 5
   plateau_min_gain: 2
+  score_noise: 1.0          # score changes this small are the AI judge varying, not a real change
   plateau_rounds: 2
   max_questions_per_round: 5
   max_changes_per_round: 10  # suggestions the AI may propose in one round

@@ -18,7 +18,7 @@ from app.schemas.models import (
     ScoreResult,
 )
 from app.scoring.render import evidence_text
-from app.scoring.synonyms import count_mentions
+from app.scoring.synonyms import canonical, count_mentions
 
 _DIGIT = re.compile(r"\d")
 _WORD = re.compile(r"[a-z][a-z0-9+#.]{3,}")
@@ -58,8 +58,8 @@ def _uncovered_responsibilities(jd: JobDescription, resume: Resume, tpl: dict[st
     return out
 
 
-def diagnose(score: ScoreResult, resume: Resume, jd: JobDescription, ctx: ProjectContext
-             ) -> list[Problem]:
+def diagnose(score: ScoreResult, resume: Resume, jd: JobDescription, ctx: ProjectContext,
+             found: list | None = None) -> list[Problem]:
     dims = {d.key: d for d in score.dimensions}
     tpl = template_text(ctx)
     problems: list[Problem] = []
@@ -73,6 +73,7 @@ def diagnose(score: ScoreResult, resume: Resume, jd: JobDescription, ctx: Projec
             if lost <= 0:
                 continue
             pid = _template_has(h.skill, tpl)
+            ev = next((f for f in found or [] if canonical(f.skill).lower() == canonical(h.skill).lower()), None)
             if h.status == "missing":
                 cause = f"{h.skill} is required" if tag == "must" else f"{h.skill} is a plus"
                 cause += " and doesn't appear in your resume."
@@ -82,6 +83,9 @@ def diagnose(score: ScoreResult, resume: Resume, jd: JobDescription, ctx: Projec
                 cause = h.note or f"{h.skill} is over-mentioned."
             if h.status == "evidenced":  # stuffing: only wording can fix it
                 fix, detail = "ai", "Reduce repetition of this keyword."
+            elif ev is not None:
+                fix, detail = "ai", (f"Your notes show it in other words: \"{ev.quotes[0][:120]}\". "
+                                     f"A bullet at {ev.job_label or 'that job'} can name it.")
             elif pid:
                 where = (f"your {pid.split('-', 1)[1]}.txt notes" if pid.startswith("notes-")
                          else "your My info notes")

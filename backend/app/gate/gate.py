@@ -185,8 +185,27 @@ def _to_gain(d, ceiling: ScoreResult, jd: JobDescription) -> str:
     return ""
 
 
-def explain(current: ScoreResult, ceiling: ScoreResult, jd: JobDescription, floor: float
-            ) -> GateExplanation:
+def best_of(current: ScoreResult, ceiling: ScoreResult) -> ScoreResult:
+    """The best version keeps the better result of each part: adding your notes may raise skills
+    coverage while the AI judge, reading a longer page, grades one part a notch lower. The
+    improve loop can add the new facts AND keep what already scored well, so each part counts
+    at its better value (before, a lower total threw away every gain and showed now = best)."""
+    cur = {x.key: x for x in current.dimensions}
+    dims = [x if x.points >= cur.get(x.key, x).points else cur[x.key] for x in ceiling.dimensions]
+    det = round(sum(x.points for x in dims if x.method != "llm"), 2)
+    llm_pts = round(sum(x.points for x in dims if x.method == "llm"), 2)
+    by_skill = {h.skill: h for h in current.must_have + current.nice_to_have}
+    pick = lambda hs: [h if h.credit >= by_skill.get(h.skill, h).credit else by_skill[h.skill] for h in hs]
+    top = sorted((x for x in dims if x.lost > 0), key=lambda x: (-x.lost, x.key))
+    return ceiling.model_copy(update={
+        "dimensions": dims, "deterministic_points": det, "llm_points": llm_pts,
+        "total": max(round(det + llm_pts, 1), current.total),
+        "must_have": pick(ceiling.must_have), "nice_to_have": pick(ceiling.nice_to_have),
+        "top_losses": [x.key for x in top[:5]]})
+
+
+def explain(current: ScoreResult, ceiling: ScoreResult, jd: JobDescription, floor: float,
+            found: list | None = None) -> GateExplanation:
     lines = []
     for key in ceiling.top_losses:
         d = next(x for x in ceiling.dimensions if x.key == key)
@@ -196,7 +215,9 @@ def explain(current: ScoreResult, ceiling: ScoreResult, jd: JobDescription, floo
         how_reached=(
             f"Your resume as uploaded scores {current.total}/100 "
             f"({current.deterministic_points} from rules, {current.llm_points} from AI judgment). "
-            f"Adding everything in your My info notes, the best it can reach is {ceiling.total}/100."),
+            f"Adding everything in your My info notes, the best it can reach is {ceiling.total}/100."
+            + (f" Your notes already show {len(found)} requirement(s) the resume is missing: "
+               + ", ".join(f.skill for f in found) + "." if found else "")),
         top_losses=lines,
         missing_must_haves=[h.skill for h in ceiling.must_have if h.status == "missing"],
         points_below_floor=round(max(floor - ceiling.total, 0), 1),
@@ -245,12 +266,12 @@ async def compute(llm: LLMClient, d: Path) -> GateState:
     ctx = load_project_context()
     (d / "projects.json").write_text(ctx.model_dump_json(indent=2), encoding="utf-8")
     from app.loop.loop import _cfg as loop_cfg
-    ceiling_resume = build_ceiling_resume(resume, ctx, jd, loop_cfg())
-    ceiling = await score_resume(llm, ceiling_resume, jd, format_flags=set(), pins=pins)
-    if ceiling.total < current.total:
-        # Adding facts can't honestly make a resume worse: if the judge says so, your resume as it is
-        # already is the best version we can build from what you know.
-        ceiling_resume, ceiling = resume, current
+    # Requirements your notes already show in other words (AI finds, code checks; cached)
+    from app.gate import evidence
+    found = await evidence.find(llm, d, resume, jd, current, ctx,
+                                int(loop_cfg().get("max_words_per_bullet", 32)))
+    ceiling_resume = build_ceiling_resume(resume, ctx, jd, loop_cfg(), found=found)
+    ceiling = best_of(current, await score_resume(llm, ceiling_resume, jd, format_flags=set(), pins=pins))
     (d / "ceiling_resume.json").write_text(ceiling_resume.model_dump_json(indent=2), encoding="utf-8")
     (d / "ceiling_score.json").write_text(ceiling.model_dump_json(indent=2), encoding="utf-8")
 
@@ -264,6 +285,8 @@ async def compute(llm: LLMClient, d: Path) -> GateState:
             k.status = "overridden"
 
     fresh = make_questions(current, ceiling, jd, knockouts, weights)
+    covered = {f"{kind}:{_norm(f.skill)}" for f in found for kind in ("skill", "close", "partial", "listed")}
+    fresh = [q for q in fresh if q.id not in covered]   # your notes already answer these
     previous = {q.id: q for q in (old.questions if old else [])}
     questions = []
     for q in fresh:
@@ -284,7 +307,8 @@ async def compute(llm: LLMClient, d: Path) -> GateState:
         base_verdict=base_verdict(ceiling.total, knockouts, cfg["thresholds"]),
         verdict=DONT, knockouts=knockouts, questions=shown,
         proposals=old.proposals if old else [], overrides=old.overrides if old else [],
-        explanation=explain(current, ceiling, jd, float(cfg["thresholds"]["floor"])),
+        explanation=explain(current, ceiling, jd, float(cfg["thresholds"]["floor"]), found),
+        found_in_notes=found,
         notes=_info_notes(jd), needs_recompute=False,
         decision=None, decision_reason=None,
     )

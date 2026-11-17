@@ -29,8 +29,22 @@ def _known_skills(jd: JobDescription) -> list[str]:
     return sorted(set(canon) | set(jd.must_have) | set(jd.nice_to_have))
 
 
+def _shown_by_sources(skill: str, support: str, confirmed: list | None) -> bool:
+    """The sources show this skill without naming it: through a related skill or concept
+    (Kafka shows asynchronous processing), or the evidence step confirmed these exact notes
+    lines show it."""
+    from app.gate.evidence import _shows
+    from app.scoring.synonyms import canonical
+    if _shows(skill, support):
+        return True
+    want = canonical(skill).lower()
+    sup = _norm(support)
+    return any(canonical(f.skill).lower() == want and any(_norm(q) in sup for q in f.quotes)
+               for f in confirmed or [])
+
+
 def check_code(change: Change, resume_texts: list[str], tpl: dict[str, str], jd: JobDescription,
-               user_texts: list[str] | None = None) -> None:
+               user_texts: list[str] | None = None, confirmed: list | None = None) -> None:
     """Verify sources and provenance. Mutates change.sources/.truth_ok/.truth_issues/.status."""
     issues: list[str] = []
     resume_norm = [_norm(t) for t in resume_texts]
@@ -59,7 +73,8 @@ def check_code(change: Change, resume_texts: list[str], tpl: dict[str, str], jd:
         if extra:
             issues.append(f"Numbers not in any source: {', '.join(sorted(extra))}.")
         for skill in _known_skills(jd):
-            if count_mentions(skill, change.new) and not count_mentions(skill, support):
+            if (count_mentions(skill, change.new) and not count_mentions(skill, support)
+                    and not _shown_by_sources(skill, support, confirmed)):
                 issues.append(f"Mentions {skill}, which its sources don't.")
 
     change.truth_issues = issues

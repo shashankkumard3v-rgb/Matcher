@@ -63,10 +63,17 @@ def rule_plan(rep: bullets_mod.BulletReport, facts: dict[str, bullets_mod.Candid
         if b.status == "rewordable" or (b.status == "ok" and b.could_show):
             plan["bullets"].append({"id": _bid(b.job, b.bullet), "action": "reword",
                                     "focus": "bring out " + ", ".join(b.could_show or b.could_cover[:1])})
-        elif b.status == "no_value":
+        elif b.status == "no_value" and not b.protected:
             plan["bullets"].append({"id": _bid(b.job, b.bullet), "action": "remove",
                                     "focus": "unrelated to this job"})
-    for fid, c in facts.items():
+        elif b.redundant:
+            full = next((j for j in rep.jobs if j.job == b.job), None)
+            if full and full.count >= full.cap:     # only when the job needs the space
+                plan["bullets"].append({"id": _bid(b.job, b.bullet), "action": "remove",
+                                        "focus": "repeats what other bullets already show"})
+    # new facts: most valuable first, your recent job preferred (it counts most for relevance)
+    recency = lambda c: c.value * (1.0 if c.job == 0 else 0.85 if c.job == 1 else 0.7)
+    for fid, c in sorted(facts.items(), key=lambda kv: -recency(kv[1])):
         if c.value >= 3:
             plan["add"].append({"job": c.job, "facts": [fid], "focus": "shows " + ", ".join(c.shows)})
     return plan
@@ -84,6 +91,8 @@ def validate_plan(raw: dict, rep: bullets_mod.BulletReport, facts: dict[str, bul
             continue
         if d["action"] == "keep" or d["id"] in decided:
             continue
+        if d["action"] == "remove" and info[d["id"]].protected:
+            continue        # the only proof of a job skill on the resume
         if d["action"] == "merge":
             other = d.get("merge_with")
             if (other not in info or other == d["id"] or info[other].job != info[d["id"]].job
@@ -159,9 +168,10 @@ async def _run_items(llm: LLMClient, skill: str, items: list[dict], jd, word_cap
 
 
 async def suggest(llm: LLMClient, resume: Resume, jd: JobDescription, score: ScoreResult | None,
-                  r: Round, cfg: dict) -> tuple[list[dict], dict]:
-    """Returns raw edits (same shape as matcher-improve's "changes") plus the plan used."""
-    rep = bullets_mod.analyze(resume, jd, score, cfg)
+                  r: Round, cfg: dict, found: list | None = None) -> tuple[list[dict], dict]:
+    """Returns raw edits (same shape as matcher-improve's "changes") plus the plan used.
+    found: requirements your notes show in other words; their notes lines come first as facts."""
+    rep = bullets_mod.analyze(resume, jd, score, cfg, found=found)
     facts = {f"f{i}": c for i, c in enumerate(rep.candidates)}
     fallback = rule_plan(rep, facts)
     try:

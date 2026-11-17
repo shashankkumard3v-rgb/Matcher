@@ -47,6 +47,9 @@ class BulletInfo(BaseModel):
     origin: str = "resume"            # resume | added
     origin_label: str = "On your uploaded resume"
     from_notes: str | None = None     # "Experience notes > Finlytics Pvt Ltd"
+    protected: list[str] = Field(default_factory=list)  # JD skills ONLY this bullet proves: never remove
+    redundant: bool = False           # everything it shows is shown by other bullets, and no number
+    stuffed: list[str] = Field(default_factory=list)    # skills it mentions that are over-mentioned
 
 
 class JobBullets(BaseModel):
@@ -155,9 +158,11 @@ def _origins(state: LoopState | None) -> dict[str, tuple[str, str | None]]:
 from app.gate.ceiling import _note_is_for  # noqa: E402  (one rule for "which job is this note about")
 
 
-def candidates(resume: Resume, jd: JobDescription, per_job: int = 12) -> list[Candidate]:
+def candidates(resume: Resume, jd: JobDescription, per_job: int = 12, found: list | None = None
+               ) -> list[Candidate]:
     """Best facts from your experience notes for each job (by company), not on the resume yet.
-    These are the building blocks the AI can combine into stronger bullets."""
+    These are the building blocks the AI can combine into stronger bullets.
+    found: notes lines that show a missing requirement in other words come first, tagged with it."""
     from app.context import notes
     have = _norm(" ".join(b for j in resume.experience for b in j.bullets))
     pairs = notes.entries(notes.read_raw("experience"))
@@ -165,7 +170,7 @@ def candidates(resume: Resume, jd: JobDescription, per_job: int = 12) -> list[Ca
     for j, job in enumerate(resume.experience):
         if not job.company:
             continue
-        found = []
+        found_here = []
         for head, line in pairs:
             if head == line or len(line.split()) < 4:
                 continue
@@ -174,9 +179,20 @@ def candidates(resume: Resume, jd: JobDescription, per_job: int = 12) -> list[Ca
             if re.match(r"^(role|dates?|location|team|product)\s*:", line, re.IGNORECASE):
                 continue
             v, info = value_of(line, jd)
-            found.append(Candidate(job=j, text=line, value=v, shows=info["shows"]))
-        found.sort(key=lambda c: -c.value)
-        out += found[:per_job]
+            found_here.append(Candidate(job=j, text=line, value=v, shows=info["shows"]))
+        found_here.sort(key=lambda c: -c.value)
+        out += found_here[:per_job]
+    if found:
+        first: list[Candidate] = []
+        for f in found:
+            for q in f.quotes:
+                if _norm(q) in have or not (0 <= f.job < len(resume.experience)):
+                    continue
+                v, info = value_of(q, jd)
+                shows = list(dict.fromkeys([f.skill, *info["shows"]]))
+                first.append(Candidate(job=f.job, text=q, value=round(v + 10, 2), shows=shows))
+        keys = {(c.job, _norm(c.text)) for c in first}
+        out = first + [c for c in out if (c.job, _norm(c.text)) not in keys]
     return out
 
 
@@ -202,7 +218,8 @@ def related_notes(bullet: str, company: str | None, pairs: list[tuple]) -> list[
 
 
 def analyze(resume: Resume, jd: JobDescription, score: ScoreResult | None, cfg: dict,
-            original: Resume | None = None, state: LoopState | None = None, version: int = 0) -> BulletReport:
+            original: Resume | None = None, state: LoopState | None = None, version: int = 0,
+            found: list | None = None) -> BulletReport:
     caps = caps_for(len(resume.experience), cfg)
     word_cap = int(cfg.get("max_words_per_bullet", 32))
     orig = {_norm(b) for j in (original or resume).experience for b in j.bullets}
@@ -210,6 +227,8 @@ def analyze(resume: Resume, jd: JobDescription, score: ScoreResult | None, cfg: 
     from app.context import notes
     pairs = notes.entries(notes.read_raw("experience"))
     infos, jobs = [], []
+    from app.loop.guard import labels
+    marks = labels(resume, jd)
     for j, job in enumerate(resume.experience):
         label = " - ".join(x for x in (job.title, job.company) if x)
         dead = reword = 0
@@ -229,7 +248,7 @@ def analyze(resume: Resume, jd: JobDescription, score: ScoreResult | None, cfg: 
             n = sum(1 for w in text.split() if any(ch.isalnum() for ch in w))
             bi = BulletInfo(job=j, bullet=b, job_label=label, text=text, value=value, status=st,
                             words=n, too_long=n > word_cap, could_show=could, could_cover=cover[:3],
-                            related_notes=rel[:3], **info)
+                            related_notes=rel[:3], **info, **marks.get((j, b), {}))
             if _norm(text) not in orig:
                 bi.origin = "added"
                 bi.origin_label, bi.from_notes = added.get(_norm(text), ("Added by Matcher", None))
@@ -237,4 +256,4 @@ def analyze(resume: Resume, jd: JobDescription, score: ScoreResult | None, cfg: 
         jobs.append(JobBullets(job=j, job_label=label, count=len(job.bullets), cap=caps[j],
                                no_value=dead, rewordable=reword))
     return BulletReport(version=version, word_cap=word_cap, jobs=jobs, bullets=infos,
-                        candidates=candidates(resume, jd))
+                        candidates=candidates(resume, jd, found=found))

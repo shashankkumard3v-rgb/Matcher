@@ -236,6 +236,15 @@ class Override(BaseModel):
     at: str
 
 
+class FoundEvidence(BaseModel):
+    """A requirement your resume doesn't show yet, but your notes do (found by the AI, checked by code)."""
+    skill: str                 # the JD requirement
+    job: int                   # resume job it belongs to
+    job_label: str = ""
+    bullet: str                # an honest bullet built only from the quotes, naming the requirement
+    quotes: list[str] = Field(default_factory=list)   # your notes lines that prove it
+
+
 class GateState(BaseModel):
     run_id: str
     current_score: float
@@ -248,6 +257,7 @@ class GateState(BaseModel):
     proposals: list[ContextProposal] = Field(default_factory=list)
     overrides: list[Override] = Field(default_factory=list)
     explanation: GateExplanation
+    found_in_notes: list[FoundEvidence] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     needs_recompute: bool = False
     decision: Optional[str] = None      # proceed | stop
@@ -287,7 +297,7 @@ class ChangeSource(BaseModel):
 
 class Change(BaseModel):
     id: str
-    kind: str               # replace_bullet | add_bullet | remove_bullet | set_summary
+    kind: str               # replace_bullet | add_bullet | remove_bullet | merge_bullets | set_summary | add_skill
     job: Optional[int] = None
     bullet: Optional[int] = None
     bullet2: Optional[int] = None     # merge_bullets: the second bullet folded into `bullet`
@@ -302,6 +312,7 @@ class Change(BaseModel):
     truth_issues: list[str] = Field(default_factory=list)
     status: str = "pending"  # pending | accepted | rejected | blocked
     lines_delta: Optional[int] = None  # fit rounds: lines this edit adds (+) or saves (-)
+    points_delta: Optional[float] = None  # exact change in the rules-based points (computed by code)
     edited_by_you: bool = False
     feedback_history: list[str] = Field(default_factory=list)
     from_notes: Optional[str] = None  # which My info section the facts come from
