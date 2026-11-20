@@ -123,4 +123,10 @@ def analyze(resume: Resume, look: Look, spec: dict | None = None) -> Layout:
                 lay.other_lines += 1
                 for i, text in enumerate(items):
                     lay.bullets.append(_bullet(f"a{i}", None, None, text, bw, look.body_pt))
+        elif section == "education" and resume.education:
+            lay.other_lines += 1                         # heading
+            for e in resume.education:
+                lay.other_lines += 1                     # degree - school    dates
+                if e.details:
+                    lay.other_lines += len(wrap(e.details, usable, look.body_pt))
     return lay

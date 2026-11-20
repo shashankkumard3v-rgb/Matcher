@@ -8,7 +8,7 @@ font:
 
 # Sections, in order. Contact details always go at the top.
 # Allowed: summary, skills, experience, achievements, education, certifications
-sections: [summary, skills, experience, achievements]
+sections: [summary, skills, experience, achievements, education]
 
 headings:
   summary: SUMMARY

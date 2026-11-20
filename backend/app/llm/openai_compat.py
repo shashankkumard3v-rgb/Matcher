@@ -152,7 +152,9 @@ class OpenAICompatClient:
         - rate limit (429) -> wait as long as the provider asks, then continue
         - missing (404)    -> drop that model for this request
         - auth (401/403)   -> stop: the key is wrong or has no access
-        A pinned `model` (used by the blind scorer) is never swapped for another one.
+        A pinned `model` (the run's judge) gets the first pass to itself; if it is busy or failing,
+        the other models of the step are tried too (self.last_model says which one answered), so
+        a busy model never stops your work.
         """
         s = load_skill(skill)
         messages = [
@@ -162,7 +164,11 @@ class OpenAICompatClient:
         passes = max(int(self.defaults.get("retries_per_model", 3)), 1)
         waits = [float(x) for x in self.defaults.get("backoff_seconds", [2, 8, 20])]
         timeout = float(self.defaults.get("timeout_seconds", 120))
-        models = [model] if model else list(self._models_for(s.step))
+        step_models = list(self._models_for(s.step))
+        models = [model] if model else step_models
+        fallback = [m for m in step_models if m != model] if model else []
+        if fallback:
+            passes = max(passes, 2)
         last: dict[str, str] = {}
         async with httpx.AsyncClient(timeout=timeout) as client:
             for n in range(passes):
@@ -191,6 +197,10 @@ class OpenAICompatClient:
                     except (LLMError, httpx.HTTPError) as e:
                         last[m] = str(e)[:200]
                         logger.warning("%s skill=%s model=%s failed: %s", self.name, skill, m, e)
+                if fallback:                 # the pinned model had its pass: now the others join in
+                    models += [m for m in fallback if m not in models]
+                    fallback = []
+                    continue
                 if n < passes - 1 and models:
                     wait = waits[min(n, len(waits) - 1)]
                     await self._sleep(wait + random.uniform(0, wait / 4))

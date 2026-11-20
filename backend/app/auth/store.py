@@ -178,7 +178,7 @@ def get_store():
             raise AuthStoreError(
                 "The MongoDB package isn't installed. In the backend folder run: "
                 ".venv\\Scripts\\python.exe -m pip install -r requirements.txt  (or double-click "
-                "check_setup.bat), then restart the server.") from e
+                "the server's environment settings), then restart the server.") from e
         except Exception as e:  # bad connection string, cluster address not found...
             raise AuthStoreError(_explain(e)) from e
     return _store

@@ -447,11 +447,12 @@ async def test_rate_limit_waits_as_asked(monkeypatch):
     assert out == {"ok": True} and sleeps[0] == 7.0 and calls == ["gemini-3.8-flash", "gemini-3.8-flash"]
 
 
-async def test_pinned_model_is_never_swapped(monkeypatch):
+async def test_a_busy_pinned_model_falls_back_to_the_others(monkeypatch):
     transport, calls = _routed_transport({"gemini-3.6-flash": [OK]})   # only another model works
-    with pytest.raises(LLMError):
-        await _client(monkeypatch, transport, []).run_skill("matcher-score", "x", model="gemini-3.8-flash")
-    assert set(calls) == {"gemini-3.8-flash"}
+    llm = _client(monkeypatch, transport, [])
+    assert await llm.run_skill("matcher-score", "x", model="gemini-3.8-flash") == {"ok": True}
+    assert calls[0] == "gemini-3.8-flash"            # the run's judge always gets the first try
+    assert llm.last_model == "gemini-3.6-flash"      # the scorer reports who stood in
 
 
 def test_models_endpoint_marks_available(monkeypatch):
@@ -493,3 +494,26 @@ def test_reasoning_effort_is_sent_and_dropped_if_rejected(monkeypatch):
     out = asyncio.run(c._call(fc, "gemini-x", [{"role": "user", "content": "hi"}], "context"))
     assert out == "{}" and sent[0]["reasoning_effort"] == "low" and "reasoning_effort" not in sent[1]
     assert c._effort_for("score") is None
+
+
+async def test_another_provider_answers_when_the_first_cant(monkeypatch):
+    from app.llm.base import LLMError
+    from app.llm.factory import FallbackClient
+
+    class Busy:
+        name, last_model = "gemini", None
+        async def run_skill(self, skill, user_input, model=None):
+            raise LLMError("gemini is overloaded right now (all models busy).")
+
+    class Works:
+        name, last_model = "openrouter", None
+        async def run_skill(self, skill, user_input, model=None):
+            assert model is None                         # the pinned Gemini model isn't sent elsewhere
+            self.last_model = "deepseek/deepseek-v4-flash:free"
+            return {"ok": True}
+
+    fb = FallbackClient.__new__(FallbackClient)
+    fb.clients = [Busy(), Works()]
+    fb.primary = fb.clients[0]
+    assert await fb.run_skill("matcher-score", "x", model="gemini-3.8-flash") == {"ok": True}
+    assert fb.last_model == "deepseek/deepseek-v4-flash:free" and fb.name == "gemini"

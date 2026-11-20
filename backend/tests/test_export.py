@@ -176,3 +176,18 @@ def test_ats_check_has_no_false_alarms_on_our_own_output():
     fit = fit_one_page(r)
     levels = {c.id: c.level for c in ats.check(fit.docx, fit.pdf, r, format_spec(), fit.look)}
     assert levels["fonts"] == "pass" and levels["symbols"] == "pass", levels
+
+
+def test_the_resume_has_an_education_section():
+    import io
+    from docx import Document
+    from app.export.builder import build_docx
+    from app.export.layout import Look
+    from app.schemas.models import Education, Experience, Resume
+    r = Resume(experience=[Experience(title="SDE 2", company="Gruve AI", start="2022-01", end="present",
+                                      bullets=["Built Kafka pipelines", "Cut p99 latency to 120ms"])],
+               education=[Education(degree="B.Tech Computer Science", institution="XYZ University",
+                                    start="2015", end="2019", details="CGPA 8.6/10")])
+    text = "\n".join(p.text for p in Document(io.BytesIO(build_docx(r, Look.at(0)))).paragraphs)
+    assert "EDUCATION" in text and "B.Tech Computer Science | XYZ University" in text and "CGPA 8.6/10" in text
+    assert text.index("EXPERIENCE") < text.index("EDUCATION")

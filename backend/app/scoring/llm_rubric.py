@@ -80,12 +80,20 @@ async def score_llm(llm: LLMClient, jd: JobDescription, resume_text: str, weight
     """Returns (dimensions, model used, warnings)."""
     user_input = build_input(jd, resume_text)
     runs: list[dict[str, dict]] = []
+    wanted = model
+    stand_ins: list[str] = []
     for _ in range(max(1, samples)):
         data = await llm.run_skill(SKILL, user_input, model=model)
-        model = model or llm.last_model  # every later sample uses the same model
+        used = getattr(llm, "last_model", None)
+        if wanted and used and used != wanted and used not in stand_ins:
+            stand_ins.append(used)
+        model = model or used  # every later sample uses the same model
         runs.append(parse_reply(data, resume_text))
 
     dims, warnings = [], []
+    if stand_ins:
+        warnings.append(f"The usual judge ({wanted}) was busy, so {', '.join(stand_ins)} scored this. "
+                        "Different models can differ by a few points; use \"Score again\" later to compare.")
     for key, label in LABELS.items():
         levels = sorted(r[key]["level"] for r in runs)
         level = _snap(statistics.median_low(levels))

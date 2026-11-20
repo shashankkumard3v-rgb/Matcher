@@ -21,7 +21,7 @@ def _verify_sync(credential: str, client_id: str) -> dict:
         raise GoogleUnavailable(
             "The Google sign-in package isn't installed. In the backend folder run: "
             ".venv\\Scripts\\python.exe -m pip install -r requirements.txt  (or double-click "
-            "check_setup.bat), then restart the server.") from e
+            "the server's environment settings), then restart the server.") from e
     try:
         claims = id_token.verify_oauth2_token(credential, g_requests.Request(), client_id)
     except TransportError as e:

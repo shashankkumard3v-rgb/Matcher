@@ -56,18 +56,18 @@ gemini:
   # fine for simple steps; leave it out to use the model's default (slower, more careful).
   steps:
     parse:                # reading files: light models first, they're faster and less busy
-      models: [gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-3.8-flash, gemini-3.6-flash, gemini-2.5-flash]
+      models: [gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-3.8-flash, gemini-3.6-flash, gemini-2.5-flash, gemini-2.5-flash-lite, gemini-flash-latest, gemini-flash-lite-latest]
       reasoning_effort: low
     score:                # the first model that answers is locked for the whole run (careful: default thinking)
-      models: [gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash]
+      models: [gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash, gemini-2.5-flash-lite, gemini-flash-latest, gemini-flash-lite-latest]
     improve:
-      models: [gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash]
+      models: [gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash, gemini-2.5-flash-lite, gemini-flash-latest, gemini-flash-lite-latest]
       reasoning_effort: low
     truth_check:
-      models: [gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash]
+      models: [gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-2.5-flash, gemini-2.5-flash-lite, gemini-flash-latest, gemini-flash-lite-latest]
       reasoning_effort: low
     context:              # turning your answer into notes: simple, so the fast models go first
-      models: [gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-3.8-flash, gemini-3.6-flash, gemini-2.5-flash]
+      models: [gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-3.8-flash, gemini-3.6-flash, gemini-2.5-flash, gemini-2.5-flash-lite, gemini-flash-latest, gemini-flash-lite-latest]
       reasoning_effort: low
 
 # ---------- OpenRouter (OPENROUTER_API_KEY): many models with one key ----------

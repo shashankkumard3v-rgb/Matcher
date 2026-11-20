@@ -786,30 +786,12 @@ async def upload_notes(kind: str, file: UploadFile = File(...), mode: str = Form
 
 # ---------- app auto-refresh ----------
 
-def code_stamp() -> float:
-    """Newest change to the server's own code, settings or skills (seconds)."""
-    newest = 0.0
-    for folder, pattern in ((config.BACKEND_DIR / "app", "*.py"), (config.CONFIG_DIR, "*.yaml"),
-                            (config.BACKEND_DIR / "skills", "*.md")):
-        for p in folder.rglob(pattern):
-            try:
-                newest = max(newest, p.stat().st_mtime)
-            except OSError:
-                pass
-    return newest
-
-
-LOADED_STAMP = code_stamp()   # what this running server was started with
-
-
 @router.get("/app-version")
 async def app_version():
-    """'version' changes whenever frontend/dist is rebuilt (the open app reloads itself).
-    'server_outdated': the server's code files changed on disk after it started, and it didn't
-    restart (auto-restart off, or it missed the change) - the app asks you to restart it."""
-    outdated = code_stamp() > LOADED_STAMP + 2
+    """'version' changes whenever the app (frontend/dist) is rebuilt, e.g. after a deploy:
+    an open app then reloads itself."""
     index = config.FRONTEND_DIST / "index.html"
     if not index.exists():
-        return {"version": None, "server_outdated": outdated}
+        return {"version": None}
     st = index.stat()
-    return {"version": f"{st.st_mtime_ns}-{st.st_size}", "server_outdated": outdated}
+    return {"version": f"{st.st_mtime_ns}-{st.st_size}"}

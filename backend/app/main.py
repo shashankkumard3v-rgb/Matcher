@@ -159,8 +159,7 @@ async def web_app(path: str, request: Request):
     dist = config.FRONTEND_DIST.resolve()
     if request.method not in ("GET", "HEAD") or path.startswith("api/"):
         raise HTTPException(404, {"code": "unknown_endpoint", "message":
-            f"The server doesn't know {request.method} /{path}. It's probably still running older code: "
-            "close the server window and start backend\\run.bat again."})
+            f"The server doesn't know {request.method} /{path}."})
     if not (dist / "index.html").exists():
         raise HTTPException(404, "Not found. The web app isn't built: see frontend/README.md")
     target = (dist / path).resolve()

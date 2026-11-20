@@ -34,12 +34,8 @@ def test_delete_refuses_odd_ids(tmp_workspace):
     assert (config.runs_dir() / "keep-me").is_dir()
 
 
-def test_old_server_is_reported(tmp_workspace, monkeypatch):
-    """A server that missed a code update says so (the app then asks you to restart it)."""
-    from app.api import routes
+def test_unknown_commands_are_a_plain_404(tmp_workspace):
     c = TestClient(app)
-    assert c.get("/api/app-version").json()["server_outdated"] is False
-    monkeypatch.setattr(routes, "LOADED_STAMP", routes.code_stamp() - 60)
-    assert c.get("/api/app-version").json()["server_outdated"] is True
-    r = c.request("PATCH", "/api/runs/abc/nothing-here")                     # an unknown command
-    assert r.status_code == 404 and "older code" in r.json()["detail"]["message"]
+    assert set(c.get("/api/app-version").json()) == {"version"}
+    r = c.request("PATCH", "/api/runs/abc/nothing-here")
+    assert r.status_code == 404 and r.json()["detail"]["code"] == "unknown_endpoint"

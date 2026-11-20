@@ -310,9 +310,15 @@ def build_docx(resume: Resume, look: Look, spec: dict | None = None) -> bytes:
                 p = doc.add_paragraph()
                 _para_format(p, look, after=look.para_after_pt)
                 p.paragraph_format.tab_stops.add_tab_stop(Cm(usable_cm), WD_TAB_ALIGNMENT.RIGHT)
-                p.add_run(" - ".join(x for x in (e.degree, e.institution) if x)).bold = True
-                if e.end:
-                    p.add_run("\t" + fmt_date(e.end))
+                p.add_run(e.degree or e.institution or "").bold = True
+                if e.degree and e.institution:
+                    p.add_run(f" | {e.institution}")
+                dates = " - ".join(x for x in (fmt_date(e.start), fmt_date(e.end)) if x)
+                if dates:
+                    p.add_run("\t" + dates)
+                if e.details:
+                    d = doc.add_paragraph(e.details)
+                    _para_format(d, look, after=look.para_after_pt)
         elif section == "certifications" and resume.certifications:
             heading(heads.get("certifications", "CERTIFICATIONS"))
             for x in resume.certifications:
