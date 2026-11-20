@@ -21,6 +21,7 @@ from app.llm.base import LLMClient
 from app.loop import loop as loop_mod
 from app.parsing.pipeline import load_project_context
 from app.loop.bullets import min_bullets
+from app.export.builder import A4_W_CM
 from app.parsing.structure import _norm
 from app.schemas.models import (
     ExportState,
@@ -125,7 +126,7 @@ def unused_facts(resume: Resume) -> list[str]:
     return out
 
 
-async def build(d: Path, history: list[str] | None = None) -> ExportState:
+async def build(d: Path, history: list[str] | None = None, llm: LLMClient | None = None) -> ExportState:
     ls = loop_mod.load_state(d)
     if ls is None or not ls.finished or ls.final_version is None:
         raise ExportError("loop_not_finished", "Finish the improve loop first (POST .../loop/finish).")
@@ -133,6 +134,23 @@ async def build(d: Path, history: list[str] | None = None) -> ExportState:
     jd = runs.load_jd(d)
     from app.export.builder import merge_links
     resume.contact.links = merge_links(resume.contact.links, load_project_context().profile.links)
+    # Skills lines: your chat choices > your skills notes' own labels > Matcher's lists > the AI (once)
+    from app.export.skillkinds import effective, page_skills
+    resume.skill_kinds = await effective(resume, d, llm)
+    resume.skills = page_skills(resume, resume.skill_kinds, jd)   # AI Tools / Soft Skills only if asked
+    resume.skill_focus = [*jd.must_have, *jd.nice_to_have]        # kept first if a Skills line is too long
+    from app.context import notes as notes_mod
+    from app.export.skillkinds import rank
+    jd_text_file = d / "jd_text.txt"
+    jd_text = jd_text_file.read_text(encoding="utf-8") if jd_text_file.exists() else ""
+    notes_text = notes_mod.read_raw("skills") + "\n" + notes_mod.read_raw("experience")
+    # only what this job needs: named, related, or backed by your recent bullets (see skillkinds.select)
+    from app.export.skillkinds import select
+    resume.skills, not_needed = select(resume, jd, jd_text, notes_text)
+    resume.skill_rank = rank(resume, jd, jd_text, notes_text)
+    for s in resume.skill_keep:             # what you asked for in the chat stays even if a line is long
+        if s in resume.skill_rank:
+            resume.skill_rank[s] += 1000
     fit = await asyncio.to_thread(fit_one_page, resume)   # rendering takes seconds; keep the server responsive
     e = _edir(d)
     base = "_".join(x for x in (_safe(resume.contact.name), _safe(jd.company)) if x) or "Resume"
@@ -147,7 +165,11 @@ async def build(d: Path, history: list[str] | None = None) -> ExportState:
         files={"docx": docx_name, "pdf": pdf_name, "report": "report.md"},
     )
     from app.export.edit import load_chat
+    from app.export.layout import page_skill_lines
     state.chat = load_chat(d)
+    _, too_long = page_skill_lines(
+        resume, (A4_W_CM - 2 * fit.look["margin_cm"]) / 2.54 * 72, fit.look["body_pt"])
+    state.skills_left_off = not_needed + too_long
     line_pt = fit.look["body_pt"] * fit.look["line_spacing"] * 1.2
     usable_pt = (29.7 - 2 * fit.look["margin_cm"]) / 2.54 * 72
     if fit.status == FITTED:
@@ -254,7 +276,7 @@ async def trim(llm: LLMClient, d: Path, option_ids: list[str]) -> ExportState:
     v = await loop_mod.trim_version(llm, d, [(o.job, o.text) for o in chosen],
                                     f"Trimmed {len(chosen)} bullet(s) to fit one page")
     msg = f"Cut {len(chosen)} bullet(s) -> v{v.n}, blind score {v.score}."
-    return await build(d, history=state.history + [msg])
+    return await build(d, history=state.history + [msg], llm=llm)
 
 
 def reopen_loop(d: Path):
@@ -372,7 +394,7 @@ async def fit_apply(llm: LLMClient, d: Path) -> dict:
     loop_mod.finish(d, ls.current_version)
     msg = (f"Fit round {r.n}: {sum(c.status == 'accepted' for c in r.changes)} edit(s), "
            f"score {r.score_before} -> {r.score_after}")
-    state = await build(d, history=(old.history if old else []) + [msg])
+    state = await build(d, history=(old.history if old else []) + [msg], llm=llm)
     if state.status != FITTED:
         state.message += " Start another fit round to keep going."
         _save(d, state)

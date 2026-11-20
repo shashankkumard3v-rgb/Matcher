@@ -119,7 +119,7 @@ export const api = {
 
   // step 5: one-page Word export
   exportGet: (id) => request("GET", `${R(id)}/export`),
-  exportBuild: (id) => request("POST", `${R(id)}/export`),
+  exportBuild: (id, regenerate = false) => request("POST", `${R(id)}/export${regenerate ? "?regenerate=true" : ""}`),
   exportTrim: (id, option_ids) => request("POST", `${R(id)}/export/trim`, { option_ids }),
   exportChat: (id, text) => request("POST", `${R(id)}/export/chat`, { text }),
   exportReopen: (id) => request("POST", `${R(id)}/export/reopen-loop`),

@@ -20,11 +20,9 @@ backend/.claude_skills.json
 # Frontend
 node_modules/
 
-# Old app builds pile up in dist/assets: keep only the current one (named in dist/index.html).
-# (Claude updates these two lines whenever it rebuilds the app.)
-frontend/dist/assets/*
-!frontend/dist/assets/index-BCkcb37_.js
-!frontend/dist/assets/index-jiPWWvjr.css
+# The built app (npm run build) isn't kept in git: Render's Dockerfile builds it on every deploy,
+# and on the laptop it's built locally.
+frontend/dist/
 
 # Old, unused file still on the laptop
 backend/app/parsing/prompts.py

@@ -976,7 +976,7 @@ function SaveToLibrary({ runId, version }) {
 
 // Chat about the finished page: "move Jira to Cloud & DevOps", "shorten the 2nd bullet at Gruve".
 // The AI turns it into changes; code checks each one; every change makes a new version.
-function ResumeChat({ runId, exp, setExport, onChanged }) {
+function ResumeChat({ runId, exp, setExport, onChanged, boxRef }) {
   const a = useAction(runId, "export-chat");
   const [text, setText] = useKept(`export-chat:${runId}`, "");
   const end = useRef(null);
@@ -989,10 +989,10 @@ function ResumeChat({ runId, exp, setExport, onChanged }) {
     if (out) { setExport(out); setText(""); onChanged?.(); }
   }
   return (
-    <div className="stack-sm resume-chat">
-      <div className="small strong">Change something on this page</div>
+    <div className="stack-sm resume-chat" ref={boxRef}>
+      <div className="small strong">💬 Change something on this page</div>
       <div className="small muted">
-        Tell the AI what to change, e.g. "move Jira to Cloud &amp; DevOps", "put the 3rd bullet at Gruve first",
+        Tell the AI what to change, e.g. "move Jira to DevOps &amp; Tools", "put the 3rd bullet at Gruve first",
         "shorten the summary to one line", "add my CGPA 7.6/10". It never adds facts you haven't given;
         every change makes a new version, so you can always go back.
       </div>
@@ -1009,7 +1009,7 @@ function ResumeChat({ runId, exp, setExport, onChanged }) {
           <li ref={end} style={{ display: "none" }} />
         </ul>
       )}
-      <textarea className="editor qa-input" rows={2} value={text} disabled={!!a.busy}
+      <textarea className="editor qa-input" rows={2} value={text} disabled={!!a.busy} id={`resume-chat-${runId}`}
                 placeholder="What should change on the page?"
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send(); }} />
@@ -1028,6 +1028,11 @@ function ExportCard({ runId, exp, setExport, setLoop }) {
   const [picked, setPicked] = useState(() => new Set(exp.trim_options.filter((t) => t.suggested).map((t) => t.id)));
   useEffect(() => setPicked(new Set(exp.trim_options.filter((t) => t.suggested).map((t) => t.id))), [exp]);
   const ok = exp.status === "fitted";
+  const chatBox = useRef(null);
+  function openChat() {
+    chatBox.current?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    setTimeout(() => document.getElementById(`resume-chat-${runId}`)?.focus(), 300);
+  }
   return (
     <div className="card">
       <h2>Step 3 · Your one-page resume (v{exp.version})</h2>
@@ -1039,7 +1044,15 @@ function ExportCard({ runId, exp, setExport, setLoop }) {
         <a className="btn btn-primary" href={api.fileUrl(runId, "docx")}>⬇ Word (.docx)</a>
         <a className="btn" href={`${api.fileUrl(runId, "pdf")}?inline=true`} target="_blank" rel="noreferrer">Open PDF</a>
         <a className="btn" href={api.fileUrl(runId, "report")}>Report</a>
+        <button className="btn" onClick={openChat}>💬 Change with AI</button>
+        <button className="btn" disabled={!!a.busy}
+                title="Build this version again with your latest notes, skills and layout rules"
+                onClick={() => a.run("Regenerating the page…", async () => { setExport(await api.exportBuild(runId, true)); setShow(true); })}>
+          🔄 Regenerate
+        </button>
       </div>
+      <Err msg={a.error} />
+      <Busy label={a.busy} />
       {show && (
         <div className="preview">
           <img src={api.previewUrl(runId, `${exp.version}-${exp.history.length}-${exp.fill}`)}
@@ -1047,7 +1060,15 @@ function ExportCard({ runId, exp, setExport, setLoop }) {
         </div>
       )}
 
-      <ResumeChat runId={runId} exp={exp} setExport={setExport} onChanged={() => setShow(true)} />
+      {exp.skills_left_off?.length > 0 && (
+        <div className="small muted">
+          Left off the Skills section for this job (it doesn't need them, or there was no room;
+          the job's own skills and the ones your bullets prove are kept first):{" "}
+          {exp.skills_left_off.join(", ")}. They stay saved. Want one back? Ask below, e.g. "add Redux back".
+        </div>
+      )}
+
+      <ResumeChat runId={runId} exp={exp} setExport={setExport} onChanged={() => setShow(true)} boxRef={chatBox} />
 
       <AtsList checks={exp.ats || []} />
       <FreshScore runId={runId} exp={exp} />
@@ -1094,9 +1115,6 @@ function ExportCard({ runId, exp, setExport, setLoop }) {
       )}
 
       <SaveToLibrary runId={runId} version={exp.version} />
-
-      <Err msg={a.error} />
-      <Busy label={a.busy} />
       <div className="download-bar">
         <button className="btn" disabled={!!a.busy}
                 onClick={() => a.run("Reopening…", async () => setLoop(await api.exportReopen(runId)))}>

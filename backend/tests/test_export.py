@@ -9,12 +9,12 @@ from app.api.routes import get_llm
 from app.export.builder import Look, build_docx
 from app.export.export import trim_options
 from app.export.fit import fit_one_page
-from app.export.render import renderer_name
+from tests.render_check import WHY, can_render
 from app.main import app
 from app.schemas.models import Contact, Experience, JobDescription, Resume
 from tests.conftest import FakeLLM
 
-needs_renderer = pytest.mark.skipif(renderer_name() is None, reason="no Word/LibreOffice to measure pages")
+needs_renderer = pytest.mark.skipif(not can_render(), reason=WHY)
 
 
 def big_resume(jobs=3, bullets=5):
@@ -195,17 +195,204 @@ def test_the_resume_has_an_education_section():
 
 
 
-def test_skills_are_sorted_by_kind_on_at_most_four_lines():
+def test_skills_are_sorted_into_four_fixed_lines():
     from app.export.builder import skill_groups, skills_line_text
-    lines = skill_groups(["Go", "Python", "SQL", "FastAPI", "gRPC", "Kafka", "React", "Next.js", "PostgreSQL", "Redis",
-                          "AWS", "Docker", "Kubernetes", "System Design", "Microservices", "Git", "Jira",
-                          "Mentoring", "Communication"])
-    text = [skills_line_text(p) for p in lines]
-    assert len(lines) == 4
-    assert text[0] == "Languages: Go, Python, SQL"
-    assert text[1] == "Backend: FastAPI, gRPC, Kafka | Frontend: React, Next.js"
-    assert text[2] == "Databases: PostgreSQL, Redis | Cloud & DevOps: AWS, Docker, Kubernetes"
-    assert text[3] == "Engineering: System Design, Microservices, Git, Jira | Soft Skills: Mentoring, Communication"
-    few = [skills_line_text(p) for p in skill_groups(["Python", "Django", "PostgreSQL", "AWS"])]
-    assert few == ["Languages: Python", "Backend: Django", "Databases: PostgreSQL", "Cloud & DevOps: AWS"]   # no sharing needed
+    lines = [skills_line_text(p) for p in skill_groups(
+        ["Go", "Python", "SQL", "FastAPI", "gRPC", "Kafka", "React", "Next.js", "PostgreSQL", "Redis",
+         "AWS", "Docker", "Kubernetes", "System Design", "Microservices", "Git", "Jira"])]
+    assert lines == ["Languages: Go, Python, SQL",
+                     "Frontend & Backend: React, Next.js, FastAPI, gRPC, Kafka, System Design, Microservices",
+                     "Databases & Cloud: PostgreSQL, Redis, AWS",
+                     "DevOps & Tools: Docker, Kubernetes, Git, Jira"]
+    few = [skills_line_text(p) for p in skill_groups(["Python", "Django", "PostgreSQL"])]
+    assert few == ["Languages: Python", "Backend: Django", "Databases: PostgreSQL"]     # labels name only what's there
     assert skill_groups(["Excel"]) == [[("", ["Excel"])]]
+
+
+def test_a_long_skills_line_keeps_the_jobs_skills_and_fits_one_printed_line():
+    from app.export.layout import page_skill_lines, wrap
+    from app.export.builder import skills_line_text
+    from app.schemas.models import Experience, Resume
+    many = ["React", "Next.js", "Redux", "HTML", "CSS", "Tailwind CSS", "Node.js", "NestJS", "gRPC", "REST APIs",
+            "GraphQL", "Kafka", "Fastify", "Express.js", "Microservices", "Distributed Systems", "Caching"]
+    r = Resume(skills=["Go"] + many, skill_focus=["Kafka", "GraphQL", "Microservices"],
+               experience=[Experience(title="SDE", company="Acme", bullets=["Built REST APIs in Node.js", "x y"])])
+    lines, dropped = page_skill_lines(r, 480, 11)
+    text = skills_line_text(lines[1])
+    assert len(wrap(text, 480, 11)) == 1 and dropped
+    assert all(x in text for x in ("Kafka", "GraphQL", "Microservices", "Node.js", "REST APIs"))   # asked for / shown
+
+
+
+def test_profile_links_read_as_short_clickable_names():
+    from app.export.builder import link_label
+    assert link_label("https://www.geeksforgeeks.org/user/shashank/") == "GeeksforGeeks"
+    assert link_label("auth.geeksforgeeks.org/user/shashank") == "GeeksforGeeks"
+    assert link_label("leetcode.com/u/shashank") == "LeetCode"
+    assert link_label("https://www.naukri.com/code360/profile/x") == "Code360"
+    assert link_label("shashank.dev") == "Portfolio"           # your own site: still opens the full address
+
+
+def test_the_header_has_no_address():
+    import io
+    from docx import Document
+    from app.export.builder import Look, build_docx
+    from app.schemas.models import Contact, Experience, Resume
+    r = Resume(contact=Contact(name="Shashank Kumar", email="s@example.com", phone="+91 99999 00000",
+                               location="Bengaluru, India", links=["https://www.geeksforgeeks.org/user/shashank/"]),
+               experience=[Experience(title="SDE", company="Acme", bullets=["Built x", "Built y"])])
+    text = "\n".join(p.text for p in Document(io.BytesIO(build_docx(r, Look.at(0)))).paragraphs)
+    assert "Bengaluru" not in text and "s@example.com | +91 99999 00000 | GeeksforGeeks" in text
+
+
+def test_skills_lines_follow_your_notes_and_know_more_names():
+    from app.export.builder import known_kind
+    from app.export.skillkinds import notes_kinds
+    assert known_kind("Go (Golang)") == "Languages" and known_kind("Express.js") == "Backend"
+    assert known_kind("Firestore") == "Databases" and known_kind("Bazel") == "DevOps" and known_kind("GCP") == "Cloud"
+    nk = notes_kinds("PayPal\n* Backend: Gin, Fastify\n* Database: Firestore\n* Build Tools: Bazel\n"
+                     "* Testing: Testify, Mock\n* Cloud & Infrastructure: Google Cloud Run\n"
+                     "- Apache Kafka: used at the ingestion pipeline")
+    assert nk["gin"] == "Backend" and nk["firestore"] == "Databases" and nk["bazel"] == "DevOps"
+    assert nk["testify"] == "Engineering" and nk["google cloud run"] == "Cloud"
+    assert "used at the ingestion pipeline" not in nk                  # "Apache Kafka:" isn't a category
+
+
+async def test_unknown_skills_are_asked_once_and_remembered(tmp_path):
+    from app.export.skillkinds import effective
+    from app.schemas.models import Resume
+
+    class Sorter:
+        calls = 0
+        async def run_skill(self, skill, user_input, model=None):
+            Sorter.calls += 1
+            assert skill == "matcher-sort-skills" and "Zorblax" in user_input and "Kubernetes" not in user_input
+            return {"kinds": [{"skill": "Zorblax", "kind": "Backend"}]}
+
+    r = Resume(skills=["Kubernetes", "Zorblax"])
+    assert (await effective(r, tmp_path, Sorter()))["Zorblax"] == "Backend"
+    assert (await effective(r, tmp_path, Sorter()))["Zorblax"] == "Backend" and Sorter.calls == 1
+
+
+def test_ai_tools_share_the_devops_and_tools_line():
+    from app.export.builder import skill_groups, skills_line_text
+    lines = [skills_line_text(p) for p in skill_groups(["Go", "Docker", "Git", "Cursor", "ChatGPT"])]
+    assert lines == ["Languages: Go", "DevOps, Tools & AI: Docker, Git, Cursor, ChatGPT"]
+
+
+def test_ai_tools_show_only_when_the_job_asks_for_ai():
+    from app.export.skillkinds import jd_wants_ai, page_skills
+    from app.schemas.models import JobDescription, Resume
+    r = Resume(skills=["Go", "Kafka", "Cursor", "ChatGPT", "Claude"])
+    plain = JobDescription(title="Backend Engineer", must_have=["Go", "Kafka"], responsibilities=["Build payment APIs"])
+    ai = JobDescription(title="Backend Engineer", must_have=["Go"], nice_to_have=["Experience with AI coding tools like Copilot"])
+    assert not jd_wants_ai(plain) and jd_wants_ai(ai)
+    assert page_skills(r, {}, plain) == ["Go", "Kafka"]
+    assert page_skills(r, {}, ai) == ["Go", "Kafka", "Cursor", "ChatGPT", "Claude"]
+    assert not jd_wants_ai(JobDescription(title="Engineer", responsibilities=["Maintain the email service"]))   # "email" isn't AI
+
+
+
+def test_soft_skills_are_always_on_the_page_with_at_least_two_kept():
+    from app.export.builder import skills_line_text
+    from app.export.layout import page_skill_lines
+    from app.export.skillkinds import page_skills
+    from app.schemas.models import JobDescription, Resume
+    r = Resume(skills=["Docker", "Kubernetes", "Helm", "Terraform", "Jenkins", "Bazel", "Git", "Jira", "Jest",
+                       "Playwright", "Postman", "ESLint", "Mentoring", "Communication", "Leadership"])
+    r.skills = page_skills(r, {}, JobDescription(title="Backend Engineer", must_have=["Go"]))
+    assert "Mentoring" in r.skills
+    lines, dropped = page_skill_lines(r, 420, 11)
+    texts = [skills_line_text(p) for p in lines]
+    assert texts[-1] == "Soft Skills: Mentoring, Communication, Leadership"      # their own line
+    assert texts[-2].startswith("DevOps & Tools:") and dropped                   # the long one was trimmed
+
+
+def test_skills_are_ranked_for_the_job_even_when_it_lists_few():
+    from app.export.skillkinds import rank
+    from app.schemas.models import Experience, JobDescription, Resume
+    r = Resume(skills=["PostgreSQL", "MySQL", "Firestore", "Redux", "Bazel"],
+               experience=[Experience(title="SDE", company="A", bullets=["Built Go services on Firestore", "x y z"])])
+    jd = JobDescription(title="Backend Engineer", must_have=["PostgreSQL", "Go"])
+    s = rank(r, jd)
+    assert s["PostgreSQL"] > s["MySQL"] > s["Redux"]          # asked > related (same kind of database) > unrelated
+    assert s["Firestore"] > s["Bazel"]                         # your bullets show Firestore
+    assert s["MySQL"] >= 60 and s["Redux"] < 20               # a backend role doesn't favour frontend
+
+
+def test_tools_keep_two_places_and_soft_skills_have_their_own_line():
+    from app.export.builder import skills_line_text
+    from app.export.layout import page_skill_lines
+    from app.schemas.models import Resume
+    r = Resume(skills=["Docker", "Kubernetes", "Helm", "Terraform", "Jenkins", "Bazel", "Ansible", "Git", "Jira",
+                       "Jest", "Mentoring", "Communication"],
+               skill_rank={"Docker": 90, "Kubernetes": 90, "Helm": 80, "Terraform": 80, "Jenkins": 80, "Bazel": 80,
+                           "Ansible": 80, "Git": 1, "Jira": 1, "Jest": 0, "Mentoring": 0, "Communication": 0})
+    lines = [skills_line_text(p) for p in page_skill_lines(r, 300, 11)[0]]
+    assert sum(x in lines[-2] for x in ("Git", "Jira", "Jest")) >= 2             # Tools keeps 2 places
+    assert lines[-1] == "Soft Skills: Mentoring, Communication"                  # Soft Skills: own line
+
+
+def _sel_resume():
+    from app.schemas.models import Experience, Resume
+    return Resume(
+        skills=["TypeScript", "Go (Golang)", "PHP", "React.js", "Redux", "Tailwind CSS", "Node.js", "NestJS",
+                "gRPC", "Kafka", "PostgreSQL", "MySQL", "AWS", "Docker", "Kubernetes", "Git", "Jira", "Jest",
+                "Mentoring", "Communication", "Leadership"],
+        experience=[Experience(title="SDE", company="A", bullets=["Built Go (Golang) gRPC services on PostgreSQL", "Ran Docker"]),
+                    Experience(title="SDE", company="B", bullets=["Built NestJS APIs with Kafka", "Built React.js pages in TypeScript"])])
+
+
+def test_skills_the_job_does_not_need_are_left_off_even_with_room():
+    from app.export.skillkinds import select
+    from app.schemas.models import JobDescription
+    jd = JobDescription(title="Backend Engineer", must_have=["Go", "PostgreSQL", "Kubernetes", "AWS"])
+    shown, off = select(_sel_resume(), jd)
+    assert {"Go (Golang)", "PostgreSQL", "Kubernetes", "AWS"} <= set(shown)        # named
+    assert {"MySQL", "gRPC", "NestJS", "Kafka"} <= set(shown)                      # related / proven, fits role
+    assert "PHP" in off and "Tailwind CSS" in off                                 # unrelated, unproven
+    assert "React.js" in shown and "Redux" in off                                 # off-role: only proven ones
+    assert sum(s in shown for s in ("Git", "Jira", "Jest")) == 2                  # Tools keep exactly their 2 best
+    assert sum(s in shown for s in ("Mentoring", "Communication", "Leadership")) == 2   # Soft Skills too
+
+
+def test_the_same_skills_for_a_frontend_job_keep_frontend():
+    from app.export.skillkinds import select
+    from app.schemas.models import JobDescription
+    jd = JobDescription(title="Frontend Engineer", must_have=["React", "TypeScript"])
+    shown, off = select(_sel_resume(), jd)
+    assert {"React.js", "Redux", "Tailwind CSS", "TypeScript"} <= set(shown)
+    assert "PHP" in off
+
+
+def test_a_skill_you_ask_for_in_the_chat_stays_on_the_page():
+    from app.export.edit import apply
+    from app.export.skillkinds import select
+    from app.schemas.models import JobDescription
+    jd = JobDescription(title="Backend Engineer", must_have=["Go", "PostgreSQL"])
+    r = _sel_resume()
+    assert "PHP" in select(r, jd)[1]
+    r, done, refused, layout = apply(r, [{"type": "add_skill", "skill": "php"}], "add PHP back", "")
+    assert r.skill_keep == ["PHP"] and layout and "PHP will show on the page." in done
+    assert "PHP" in select(r, jd)[0]
+
+
+def test_word_dropping_the_connection_is_retried_then_explained(monkeypatch):
+    from app.export import render
+    calls = []
+
+    def flaky(src, out):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("(-2147023174, 'The RPC server is unavailable.')")
+        out.write_bytes(b"%PDF-1.4")
+    monkeypatch.setattr(render, "renderer_name", lambda choice="auto": "word")
+    monkeypatch.setattr(render, "_word_convert", flaky)
+    assert render.docx_to_pdf(b"x") == (b"%PDF-1.4", "word") and len(calls) == 2   # second try works
+
+    def dead(src, out):
+        raise OSError("RPC server is unavailable")
+    monkeypatch.setattr(render, "_word_convert", dead)
+    monkeypatch.setattr(render, "_soffice", lambda: None)
+    with pytest.raises(render.RenderError, match="Word didn't answer"):
+        render.docx_to_pdf(b"x")

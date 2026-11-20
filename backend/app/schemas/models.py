@@ -50,8 +50,14 @@ class Resume(BaseModel):
     achievements: list[str] = Field(default_factory=list)  # awards, wins, recognitions
     languages: list[str] = Field(default_factory=list)  # spoken languages
     projects: list[ResumeProject] = Field(default_factory=list)
-    # page layout only: which Skills line a skill goes on, when you've said so ("Jira" -> "Cloud & DevOps")
+    # page layout only: which Skills line a skill goes on, when you've said so ("Jira" -> "DevOps")
     skill_kinds: dict[str, str] = Field(default_factory=dict)
+    # page layout only: the skills the job asks for, kept first when a Skills line must be shortened
+    skill_focus: list[str] = Field(default_factory=list)
+    # page layout only: how relevant each skill is for this job (higher stays when a line is too long)
+    skill_rank: dict[str, float] = Field(default_factory=dict)
+    # skills you asked (in the resume chat) to show on the page even if Matcher would leave them off
+    skill_keep: list[str] = Field(default_factory=list)
     unparsed: list[str] = Field(
         default_factory=list,
         description="Text the parser could not place in a section.",
@@ -419,3 +425,4 @@ class ExportState(BaseModel):
     ats: list[AtsCheck] = Field(default_factory=list)
     history: list[str] = Field(default_factory=list)
     chat: list[ChatTurn] = Field(default_factory=list)
+    skills_left_off: list[str] = Field(default_factory=list)   # to keep Skills to 4 one-line rows

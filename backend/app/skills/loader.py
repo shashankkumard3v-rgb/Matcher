@@ -36,6 +36,7 @@ SKILL_STEP = {
     "matcher-profile-resume": "score",   # strict, careful model settings (like the judge)
     "matcher-find-evidence": "improve",  # reads your notes for missing requirements
     "matcher-edit-resume": "improve",    # chat about the finished resume (Step 3)
+    "matcher-sort-skills": "context",    # which Skills line an unknown skill goes on (light, fast)
 }
 
 

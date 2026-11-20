@@ -1,6 +1,6 @@
 ---
 name: matcher-edit-resume
-description: Matcher step 5 chat. Turns the user's instruction about their finished one-page resume ("move Jira to Cloud & DevOps", "shorten the second bullet at Gruve", "put the CGPA after the university") into a short list of precise edit actions. Use when the user chats about changing their generated resume.
+description: Matcher step 5 chat. Turns the user's instruction about their finished one-page resume ("move Jira to DevOps", "shorten the second bullet at Gruve", "put the CGPA after the university") into a short list of precise edit actions. Use when the user chats about changing their generated resume.
 ---
 
 # Edit the finished resume
@@ -10,6 +10,9 @@ that into actions. Code checks every action and applies only the safe ones, so b
 
 ## What you get
 
+- The Skills section prints up to 5 lines: Languages / Frontend & Backend / Databases & Cloud /
+  DevOps & Tools (+ AI only when the job asks) / Soft Skills. "Move X to the DevOps line"
+  = set_skill_kind to DevOps; Tools = Engineering.
 - RESUME: the resume as it is now. Every part has an id: bullets "j0b2" (job 0, bullet 2),
   achievements "a1", education "e0". SKILLS shows each skill with the line ("kind") it is on.
 - KINDS: the only allowed Skills lines.
@@ -29,8 +32,10 @@ that into actions. Code checks every action and applies only the safe ones, so b
 
 ## Actions
 
-- {"type": "set_skill_kind", "skill": "Jira", "kind": "Cloud & DevOps"}   (kind from KINDS)
+- {"type": "set_skill_kind", "skill": "Jira", "kind": "DevOps"}   (kind from KINDS)
 - {"type": "add_skill", "skill": "Redis"}  /  {"type": "remove_skill", "skill": "Figma"}
+  (a skill in LEFT OFF THE PAGE is still saved: "add Redux back" / "show Redux" = add_skill Redux;
+  Matcher left it off because the job doesn't need it, so only on the user's request)
 - {"type": "rename_skill", "skill": "Postgres", "new": "PostgreSQL"}
 - {"type": "edit_bullet", "id": "j0b2", "new": "..."}  /  {"type": "remove_bullet", "id": "j0b2"}
 - {"type": "move_bullet", "id": "j0b3", "position": 0}   (0 = first in that job)

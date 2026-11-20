@@ -5,6 +5,8 @@ in the body (not the page header), standard section headings, real Word bullets.
 """
 from __future__ import annotations
 
+import re
+
 import io
 from dataclasses import dataclass
 from functools import lru_cache
@@ -27,8 +29,14 @@ LINK_LABELS = {
     "gitlab.com": "GitLab", "kaggle.com": "Kaggle", "medium.com": "Medium",
     "stackoverflow.com": "Stack Overflow", "codeforces.com": "Codeforces",
     "hackerrank.com": "HackerRank", "codechef.com": "CodeChef", "behance.net": "Behance",
-    "dribbble.com": "Dribbble",
+    "dribbble.com": "Dribbble", "geeksforgeeks.org": "GeeksforGeeks", "interviewbit.com": "InterviewBit",
+    "hackerearth.com": "HackerEarth", "atcoder.jp": "AtCoder", "topcoder.com": "Topcoder",
+    "codingninjas.com": "Code360", "leetcode.cn": "LeetCode", "hashnode.dev": "Hashnode", "dev.to": "DEV",
+    "x.com": "X", "twitter.com": "X", "credly.com": "Credly", "huggingface.co": "Hugging Face",
+    "bitbucket.org": "Bitbucket", "npmjs.com": "npm", "pypi.org": "PyPI", "substack.com": "Substack",
 }
+# pages on a bigger site: naukri.com/code360 is Coding Ninjas' Code360
+LINK_PATH_LABELS = {("naukri.com", "/code360"): "Code360"}
 
 
 def normalize_url(url: str) -> str:
@@ -37,12 +45,19 @@ def normalize_url(url: str) -> str:
 
 
 def link_label(url: str) -> str:
-    host = normalize_url(url).split("://", 1)[1].split("/", 1)[0].lower()
+    """The short clickable text for a link: "LeetCode", "GeeksforGeeks"... A site we don't know
+    (your own site) reads "Portfolio"; it still opens the full address."""
+    rest = normalize_url(url).split("://", 1)[1]
+    host, _, path = rest.partition("/")
+    host = host.lower()
     host = host[4:] if host.startswith("www.") else host
+    for (domain, prefix), label in LINK_PATH_LABELS.items():
+        if (host == domain or host.endswith("." + domain)) and ("/" + path.lower()).startswith(prefix):
+            return label
     for domain, label in LINK_LABELS.items():
         if host == domain or host.endswith("." + domain):
             return label
-    return host  # e.g. "priya.dev" for a personal site
+    return "Portfolio"
 
 
 def is_web_address(url: str) -> bool:
@@ -203,78 +218,128 @@ def achievements_of(resume: Resume, spec: dict) -> list[str]:
     return items
 
 
-# Skills on the page: your skills sorted into 7 kinds, shown on at most 4 lines. When there are
-# more than 4 kinds, two related kinds share a line, each with its own label:
-#   Languages: Go, Python, SQL
-#   Backend: gRPC, FastAPI, Kafka | Frontend: React, Next.js
-#   Databases: PostgreSQL, Redis | Cloud & DevOps: AWS, Docker, Kubernetes
-#   Engineering: System Design, Microservices, Git | Soft Skills: Mentoring, Communication
-SKILL_KINDS = ["Languages", "Backend", "Frontend", "Databases", "Cloud & DevOps", "Engineering", "Soft Skills"]
+# Skills on the page: never more than 4 printed lines. Each skill gets a kind; kinds share fixed lines:
+#   Languages: Go, Python, TypeScript, SQL
+#   Frontend & Backend: React, Next.js, Node.js, gRPC, Kafka, Microservices
+#   Databases & Cloud: PostgreSQL, Redis, Firestore, AWS, GCP
+#   DevOps & Tools: Docker, Kubernetes, CI/CD, Git, Jest (+ AI tools when the job asks for AI)
+# A line that would wrap keeps the skills the job asks for and drops the least relevant ones
+# (layout.page_skill_lines); the page tells you which were left off.
+SKILL_KINDS = ["Languages", "Frontend", "Backend", "Databases", "Cloud", "DevOps", "Engineering", "AI Tools",
+               "Soft Skills"]
+_OLD_KINDS = {"Cloud & DevOps": "DevOps"}          # choices saved before Cloud and DevOps were split
+SKILL_LINES = [("Languages", ["Languages"]), ("Frontend & Backend", ["Frontend", "Backend"]),
+               ("Databases & Cloud", ["Databases", "Cloud"]),
+               ("DevOps & Tools", ["DevOps", "Engineering", "AI Tools"]),
+               ("Soft Skills", ["Soft Skills"])]          # their own line (user's choice)
+_SHORT = {"Engineering": "Tools", "AI Tools": "AI"}
 _KIND_FAMILIES = {"language": "Languages", "backend_framework": "Backend", "queue": "Backend",
                   "frontend": "Frontend", "database": "Databases", "cache": "Databases",
-                  "cloud": "Cloud & DevOps", "orchestration": "Cloud & DevOps", "ci": "Cloud & DevOps",
-                  "iac": "Cloud & DevOps", "monitoring": "Cloud & DevOps"}
+                  "cloud": "Cloud", "orchestration": "DevOps", "ci": "DevOps",
+                  "iac": "DevOps", "monitoring": "DevOps"}
 _KIND_WORDS = {
     "Languages": {"sql", "bash", "shell", "shell scripting", "powershell"},
     "Backend": {"rest", "rest apis", "restful apis", "grpc", "graphql", "node.js", "express", "spring", "spring boot",
                 "django", "flask", "fastapi", ".net", "asp.net", "websockets", "celery", "kafka", "rabbitmq",
-                "api development", "backend development"},
+                "api development", "backend development", "fastify", "gin", "nestjs", "koa", "hapi", "fiber",
+                "echo", "laravel", "codeigniter", "rails", "ruby on rails", "axios", "socket.io", "trpc",
+                # architecture sits with the backend it describes
+                "system design", "distributed systems", "microservices", "event-driven architecture",
+                "api design", "design patterns", "oop", "concurrency", "async programming", "caching",
+                "low level design", "high level design", "scalability", "performance optimization",
+                "data structures and algorithms", "dsa", "algorithms", "security"},
     "Frontend": {"react", "angular", "vue", "next.js", "html", "css", "tailwind", "tailwind css", "redux",
-                 "javascript frameworks", "frontend development", "react native", "flutter"},
+                 "javascript frameworks", "frontend development", "react native", "flutter", "vite", "webpack",
+                 "svelte", "jquery", "bootstrap", "material ui", "sass"},
     "Databases": {"postgresql", "mysql", "mongodb", "redis", "elasticsearch", "dynamodb", "cassandra", "sqlite",
-                  "oracle", "sql server", "snowflake", "bigquery", "nosql", "databases"},
-    "Cloud & DevOps": {"aws", "gcp", "azure", "docker", "kubernetes", "terraform", "helm", "linux", "jenkins",
-                       "github actions", "ci/cd", "prometheus", "grafana", "nginx", "ansible", "devops", "cloud"},
-    "Engineering": {"system design", "distributed systems", "microservices", "event-driven architecture",
-                    "api design", "design patterns", "oop", "data structures and algorithms", "dsa", "algorithms",
-                    "concurrency", "async programming", "caching", "testing", "unit testing", "tdd", "git",
-                    "agile", "scrum", "code review", "performance optimization", "security", "scalability",
-                    "observability", "debugging", "low level design", "high level design"},
+                  "oracle", "sql server", "snowflake", "bigquery", "nosql", "databases", "firestore", "firebase",
+                  "supabase", "neo4j", "mariadb", "memcached", "clickhouse", "cockroachdb", "prisma", "mongoose"},
+    "Cloud": {"aws", "gcp", "azure", "cloud", "google cloud", "google cloud platform", "google cloud run",
+              "cloud run", "compute engine", "google compute engine", "lambda", "aws lambda", "s3", "ec2",
+              "cloudflare", "vercel", "netlify", "heroku", "digitalocean", "oracle cloud"},
+    "DevOps": {"docker", "kubernetes", "terraform", "helm", "linux", "jenkins", "github actions", "ci/cd",
+               "prometheus", "grafana", "nginx", "ansible", "devops", "bazel", "gke", "eks", "ecs", "datadog",
+               "argocd", "gitlab ci", "circleci", "docker compose", "containers"},
+    "Engineering": {"testing", "unit testing", "tdd", "git", "agile", "scrum", "code review", "observability",
+                    "debugging", "go test", "jest", "vitest", "playwright", "pytest", "junit", "testify",
+                    "mocha", "cypress", "jira", "perforce", "eslint", "npm", "postman"},
+    "AI Tools": {"cursor", "copilot", "github copilot", "chatgpt", "claude", "claude code", "codex", "gemini",
+                 "windsurf", "perplexity", "v0", "bolt", "lovable", "openai api", "anthropic sdk", "openai",
+                 "anthropic", "langchain", "llamaindex", "hugging face", "ollama", "llms", "llm", "rag",
+                 "mcp", "fastmcp", "ai agents", "agent skills", "prompt engineering", "tool calling",
+                 "vertex ai", "gpt", "gpt-4o", "bert", "cursor sdk", "midjourney", "generative ai", "genai"},
     "Soft Skills": {"leadership", "communication", "mentoring", "teamwork", "collaboration", "problem solving",
                     "stakeholder management", "ownership", "presentation", "time management",
                     "cross-functional collaboration", "team leadership", "critical thinking", "adaptability"},
 }
-_PAIRS = [("Backend", "Frontend"), ("Databases", "Cloud & DevOps"), ("Engineering", "Soft Skills")]
+
+
+def _names(skill: str) -> list[str]:
+    """Every way to look a skill up: "Go (Golang)" -> go (golang), go, golang; "Express.js" -> express;
+    "CDETS/Jira" -> cdets, jira; plus each one's usual name from the synonym list."""
+    from app.scoring.synonyms import canonical
+    raw = skill.strip()
+    parts = [raw, re.sub(r"\s*\(.*?\)\s*", " ", raw).strip()]
+    parts += re.findall(r"\(([^)]+)\)", raw)
+    parts += [x for x in re.split(r"\s*/\s*", raw) if x and len(re.split(r"\s*/\s*", raw)) > 1 and "ci/cd" not in raw.lower()]
+    parts += [re.sub(r"\.js$", "", x, flags=re.IGNORECASE) for x in list(parts)]
+    out = []
+    for x in parts:
+        for y in (x, canonical(x)):
+            y = y.strip().lower()
+            if y and y not in out:
+                out.append(y)
+    return out
+
+
+def known_kind(skill: str) -> str | None:
+    """The kind from Matcher's own lists, or None if it doesn't know the skill."""
+    from app.scoring.synonyms import family, is_language
+    names = _names(skill)
+    for kind, words in _KIND_WORDS.items():
+        if any(n in words for n in names):
+            return kind
+    for n in names:
+        fam = "language" if is_language(n) else family(n)
+        if fam in _KIND_FAMILIES:
+            return _KIND_FAMILIES[fam]
+    return None
 
 
 def _kind_of(skill: str, overrides: dict[str, str] | None = None) -> str:
-    from app.scoring.synonyms import canonical, family, is_language
+    """overrides = your choices (chat), what your skills notes say and the AI's sorting of skills
+    Matcher didn't know (see app/export/skillkinds.py); then Matcher's own lists."""
     key = skill.strip().lower()
-    for k, v in (overrides or {}).items():          # your own choice ("move Jira to Cloud & DevOps")
+    for k, v in (overrides or {}).items():
+        v = _OLD_KINDS.get(v, v)
         if k.strip().lower() == key and v in SKILL_KINDS:
             return v
-    canon = canonical(skill).lower()
-    for kind, words in _KIND_WORDS.items():
-        if key in words or canon in words:
-            return kind
-    fam = "language" if is_language(skill) else family(skill)
-    if fam in _KIND_FAMILIES:
-        return _KIND_FAMILIES[fam]
-    return "Engineering"          # tools and practices we don't know (Jira, Figma, ...)
+    return known_kind(skill) or "Engineering"
 
 
-def skill_groups(skills: list[str], max_lines: int = 4,
+def _line_label(default: str, kinds_present: list[str]) -> str:
+    names = [_SHORT.get(k, k) for k in kinds_present]
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + " & " + names[-1] if len(names) > 2 else " & ".join(names)
+
+
+def skill_groups(skills: list[str], max_lines: int = 5,
                  overrides: dict[str, str] | None = None) -> list[list[tuple[str, list[str]]]]:
-    """Lines of (label, skills) parts: one kind per line while that fits in `max_lines`, else
-    related kinds share a line (Backend | Frontend, Databases | Cloud & DevOps,
-    Engineering | Soft Skills). Languages always has its own line."""
+    """Up to 5 lines, each [(label, skills)]: Languages / Frontend & Backend / Databases & Cloud /
+    DevOps & Tools (+ AI) / Soft Skills. A line's label names only the kinds it actually has."""
     kinds: dict[str, list[str]] = {k: [] for k in SKILL_KINDS}
     for sk in dict.fromkeys(x.strip() for x in skills if x and x.strip()):
         kinds[_kind_of(sk, overrides)].append(sk)
-    used = [k for k in SKILL_KINDS if kinds[k]]
-    if not used:
+    if not any(kinds.values()):
         return []
-    if len(used) == 1 and used[0] == "Engineering":
+    if all(not v for k, v in kinds.items() if k != "Engineering"):
         return [[("", kinds["Engineering"])]]               # nothing we can sort: one plain line
-    lines = [[(k, kinds[k])] for k in used]
-    pairs = list(_PAIRS)
-    while len(lines) > max_lines and pairs:
-        a, b = pairs.pop(0)
-        ia = next((i for i, ln in enumerate(lines) if ln[0][0] == a and len(ln) == 1), None)
-        ib = next((i for i, ln in enumerate(lines) if ln[0][0] == b and len(ln) == 1), None)
-        if ia is not None and ib is not None:
-            lines[ia] = lines[ia] + lines[ib]
-            lines.pop(ib)
+    lines = []
+    for default, members in SKILL_LINES[:max_lines]:
+        present = [k for k in members if kinds[k]]
+        if present:
+            lines.append([(_line_label(default, present), [x for k in present for x in kinds[k]])])
     return lines
 
 
@@ -340,7 +405,8 @@ def build_docx(resume: Resume, look: Look, spec: dict | None = None) -> bytes:
     _para_format(p, look, after=1)
     run = p.add_run(c.name or "")
     run.bold, run.font.size = True, Pt(look.name_pt)
-    plain = [x for x in [c.email, c.phone, c.location] if x]
+    # email and phone only: your city/address isn't on the page (show_location: true in format_spec to add it)
+    plain = [x for x in [c.email, c.phone, c.location if spec.get("show_location") else None] if x]
     links = merge_links(c.links)
     if plain or links:
         p = doc.add_paragraph(" | ".join(plain))
@@ -361,7 +427,8 @@ def build_docx(resume: Resume, look: Look, spec: dict | None = None) -> bytes:
             _para_format(p, look, after=look.para_after_pt)
         elif section == "skills" and resume.skills:
             heading(heads.get("skills", "SKILLS"))
-            lines = skill_groups(resume.skills, overrides=resume.skill_kinds)
+            from app.export.layout import page_skill_lines
+            lines, _ = page_skill_lines(resume, usable_cm / 2.54 * 72, look.body_pt)
             for i, parts in enumerate(lines):
                 p = doc.add_paragraph()
                 _para_format(p, look, after=look.para_after_pt if i == len(lines) - 1 else 1)

@@ -5,12 +5,12 @@ from docx import Document
 from fastapi.testclient import TestClient
 
 from app.api.routes import get_llm
-from app.export.render import renderer_name
+from tests.render_check import WHY, can_render
 from app.main import app
 from tests.conftest import FakeLLM
 from tests.test_export import big_resume
 
-pytestmark = pytest.mark.skipif(renderer_name() is None, reason="needs Word/LibreOffice")
+pytestmark = pytest.mark.skipif(not can_render(), reason=WHY)
 
 
 def finished_run(tmp_workspace, resume_pdf, jd_docx):

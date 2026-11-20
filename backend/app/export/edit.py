@@ -1,4 +1,4 @@
-"""Chat about the finished resume (Step 3): "move Jira to Cloud & DevOps", "shorten the 2nd
+"""Chat about the finished resume (Step 3): "move Jira to DevOps", "shorten the 2nd
 bullet at Gruve", "put the summary in 2 lines".
 
 The AI only turns your message into actions; code checks every action and applies the safe
@@ -29,11 +29,13 @@ def _numbers(text: str) -> set[str]:
     return {n.replace(",", "") for n in _NUM.findall(text or "")}
 
 
-def view(resume: Resume) -> dict:
+def view(resume: Resume, d: Path | None = None) -> dict:
     from app.export.builder import _kind_of
+    from app.export.skillkinds import effective_now
+    kinds = effective_now(resume, d)      # the lines as they are on the page now
     return {
         "summary": resume.summary,
-        "skills": [{"skill": s, "kind": _kind_of(s, resume.skill_kinds)} for s in resume.skills],
+        "skills": [{"skill": s, "kind": _kind_of(s, kinds)} for s in resume.skills],
         "experience": [{"job": j, "title": x.title, "company": x.company,
                         "bullets": [{"id": f"j{j}b{b}", "text": t} for b, t in enumerate(x.bullets)]}
                        for j, x in enumerate(resume.experience)],
@@ -42,12 +44,24 @@ def view(resume: Resume) -> dict:
     }
 
 
-def _input(resume: Resume, jd: JobDescription, chat: list[ChatTurn], message: str, notes: list[str]) -> str:
+def _left_off(resume: Resume, jd: JobDescription) -> list[str]:
+    from app.export.skillkinds import page_skills, select
+    try:
+        page = resume.model_copy(deep=True)
+        page.skills = page_skills(page, page.skill_kinds, jd)
+        return [s for s in resume.skills if s not in select(page, jd)[0]]
+    except Exception:
+        return []
+
+
+def _input(resume: Resume, jd: JobDescription, chat: list[ChatTurn], message: str, notes: list[str],
+           d: Path | None = None) -> str:
     from app.export.builder import SKILL_KINDS
     return "\n\n".join([
         "JOB: " + " at ".join(x for x in (jd.title, jd.company) if x),
         "KINDS: " + json.dumps(SKILL_KINDS),
-        "RESUME:\n" + json.dumps(view(resume), ensure_ascii=False, indent=1),
+        "RESUME:\n" + json.dumps(view(resume, d), ensure_ascii=False, indent=1),
+        "LEFT OFF THE PAGE FOR THIS JOB (still saved; add_skill shows one again): " + (", ".join(_left_off(resume, jd)) or "(none)"),
         "YOUR NOTES:\n" + ("\n".join(f"- {n}" for n in notes[:80]) or "(none)"),
         "CHAT:\n" + ("\n".join(f"{t.role}: {t.text}" for t in chat[-8:]) or "(none)"),
         "MESSAGE: " + message,
@@ -108,13 +122,20 @@ def apply(resume: Resume, actions: list, said: str, notes_text: str, min_bullets
                 done.append(f"Moved {skill} to {kind}.")
             elif t == "add_skill":
                 skill = str(a.get("skill") or "").strip()
-                if not skill or any(s.lower() == skill.lower() for s in r.skills):
+                have = next((s for s in r.skills if s.lower() == skill.lower()), None)
+                if have:      # saved but left off the page for this job: show it anyway
+                    if have.lower() not in {x.lower() for x in r.skill_keep}:
+                        r.skill_keep.append(have)
+                    done.append(f"{have} will show on the page.")
+                    continue
+                if not skill:
                     continue
                 if not count_mentions(skill, "\n".join([said, notes_text, *(b for j in r.experience for b in j.bullets)])):
                     refused.append(f"Didn't add {skill}: your resume, notes and messages don't mention it. "
                                    "Tell me where you used it and I'll add it.")
                     continue
                 r.skills.append(skill)
+                r.skill_keep.append(skill)
                 layout_only = False
                 done.append(f"Added {skill} to Skills.")
             elif t == "remove_skill":
@@ -122,6 +143,7 @@ def apply(resume: Resume, actions: list, said: str, notes_text: str, min_bullets
                 if skill:
                     r.skills.remove(skill)
                     r.skill_kinds.pop(skill, None)
+                    r.skill_keep = [x for x in r.skill_keep if x.lower() != skill.lower()]
                     layout_only = False
                     done.append(f"Removed {skill} from Skills.")
             elif t == "rename_skill":
@@ -254,7 +276,7 @@ async def chat(llm: LLMClient, d: Path, message: str):
     history = load_chat(d)
     note_lines = [ln for k in ("experience", "skills") for h, ln in notes.entries(notes.read_raw(k)) if h != ln]
     try:
-        data = await llm.run_skill(SKILL, _input(resume, jd, history, message, note_lines))
+        data = await llm.run_skill(SKILL, _input(resume, jd, history, message, note_lines, d))
     except LLMError as e:
         raise export_mod.ExportError("llm_failed", str(e))
     reply = str((data or {}).get("reply") or "").strip() if isinstance(data, dict) else ""
@@ -272,7 +294,7 @@ async def chat(llm: LLMClient, d: Path, message: str):
                             done=done, refused=refused, version=version))
     _save_chat(d, history)
     if version is not None:
-        out = await export_mod.build(d, history=state.history + [f"v{version}: {'; '.join(done)}"])
+        out = await export_mod.build(d, history=state.history + [f"v{version}: {'; '.join(done)}"], llm=llm)
     else:
         out = state
     out.chat = history

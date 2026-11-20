@@ -509,10 +509,14 @@ class TrimBody(BaseModel):
 
 
 @router.post("/runs/{run_id}/export", response_model=ExportState)
-async def export_build(run_id: str):
-    """Build the one-page A4 Word resume from the loop's final version."""
+async def export_build(run_id: str, regenerate: bool = False, llm: LLMClient = Depends(get_llm)):
+    """Build the one-page A4 Word resume from the loop's final version. Again = regenerate: the
+    same version rebuilt with your latest notes, skills and layout rules (chat and history kept)."""
     try:
-        return await export_mod.build(_run(run_id))
+        d = _run(run_id)
+        old = export_mod.load_state(d) if regenerate else None
+        history = (old.history + ["Regenerated the page with your latest notes and settings."]) if old else None
+        return await export_mod.build(d, history=history, llm=llm)
     except Exception as e:
         raise _export_errors(e)
 

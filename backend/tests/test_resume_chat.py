@@ -3,7 +3,7 @@ import pytest
 
 from app.api.routes import get_llm
 from app.export.edit import apply
-from app.export.render import renderer_name
+from tests.render_check import WHY, can_render
 from app.main import app
 from app.schemas.models import Education, Experience, Resume
 from tests.conftest import FakeLLM
@@ -19,11 +19,11 @@ def _r():
 
 
 def test_moving_a_skill_to_another_line_is_layout_only():
-    r, done, refused, layout = apply(_r(), [{"type": "set_skill_kind", "skill": "jira", "kind": "Cloud & DevOps"}],
-                                     "move jira to cloud", "")
-    assert r.skill_kinds == {"Jira": "Cloud & DevOps"} and layout and done == ["Moved Jira to Cloud & DevOps."]
+    r, done, refused, layout = apply(_r(), [{"type": "set_skill_kind", "skill": "jira", "kind": "Backend"}],
+                                     "move jira to backend", "")
+    assert r.skill_kinds == {"Jira": "Backend"} and layout and done == ["Moved Jira to Backend."]
     from app.export.builder import skill_groups, skills_line_text
-    assert any("Cloud & DevOps: Jira, Docker" in skills_line_text(p) for p in skill_groups(r.skills, overrides=r.skill_kinds))
+    assert any("Backend: Kafka, Jira" in skills_line_text(p) for p in skill_groups(r.skills, overrides=r.skill_kinds))
     _, _, refused, _ = apply(_r(), [{"type": "set_skill_kind", "skill": "Jira", "kind": "Magic"}], "", "")
     assert "use one of" in refused[0]
 
@@ -55,7 +55,7 @@ class ChatLLM(FakeLLM):
         return await super().run_skill(skill, user_input, model)
 
 
-@pytest.mark.skipif(renderer_name() is None, reason="needs Word/LibreOffice")
+@pytest.mark.skipif(not can_render(), reason=WHY)
 def test_chat_makes_a_new_version_and_rebuilds_the_page(tmp_workspace, resume_pdf, jd_docx):
     from tests.test_fit_agent import finished_run
     c, run = finished_run(tmp_workspace, resume_pdf, jd_docx)
@@ -68,3 +68,7 @@ def test_chat_makes_a_new_version_and_rebuilds_the_page(tmp_workspace, resume_pd
     assert "matcher-score" not in llm.calls                     # moving a skill doesn't need a new score
     assert "RESUME:" in llm.inputs[-1] and "put Docker under Engineering" in llm.inputs[-1]
     assert c.get(f"/api/runs/{run}/export").json()["chat"][1]["text"] == "Moved it."
+    # Regenerate: same version rebuilt, chat and history kept
+    again = c.post(f"/api/runs/{run}/export?regenerate=true").json()
+    assert again["version"] == out["version"] and len(again["chat"]) == 2
+    assert again["history"][-1].startswith("Regenerated the page")

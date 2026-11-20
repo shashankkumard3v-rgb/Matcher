@@ -66,6 +66,20 @@ def renderer_name(choice: str = "auto") -> str | None:
     return None
 
 
+def _word_convert(src: Path, out: Path) -> None:
+    from docx2pdf import convert
+    with _WORD_LOCK:            # one Word conversion at a time
+        import pythoncom        # Word is driven over COM; each thread must initialise it
+        pythoncom.CoInitialize()
+        try:
+            out.unlink(missing_ok=True)
+            convert(str(src), str(out))
+            if not out.exists():
+                raise RenderError("Word made no PDF")
+        finally:
+            pythoncom.CoUninitialize()
+
+
 def docx_to_pdf(docx: bytes, choice: str = "auto") -> tuple[bytes, str]:
     name = renderer_name(choice)
     if name is None:
@@ -77,15 +91,19 @@ def docx_to_pdf(docx: bytes, choice: str = "auto") -> tuple[bytes, str]:
         src.write_bytes(docx)
         out = Path(tmp) / "resume.pdf"
         if name == "word":
-            from docx2pdf import convert
-            with _WORD_LOCK:            # one Word conversion at a time
-                import pythoncom        # Word is driven over COM; each thread must initialise it
-                pythoncom.CoInitialize()
+            try:
+                _word_convert(src, out)
+            except Exception as e:
+                # Word sometimes stops answering mid-conversion ("RPC server unavailable",
+                # 0x800706BA): try once more with a fresh Word, then LibreOffice if there is one
                 try:
-                    convert(str(src), str(out))
-                finally:
-                    pythoncom.CoUninitialize()
-        else:
+                    _word_convert(src, out)
+                except Exception:
+                    if not _soffice():
+                        raise RenderError(f"Microsoft Word didn't answer while making the PDF ({e}). "
+                                          "Close any Word windows asking a question and try again.") from e
+                    name = "libreoffice"
+        if name == "libreoffice":
             cmd = [_soffice(), f"-env:UserInstallation=file:///{_LO_PROFILE.as_posix().lstrip('/')}",
                    "--headless", "--convert-to", "pdf", "--outdir", tmp, str(src)]
             with _LO_LOCK:

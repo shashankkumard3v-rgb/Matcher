@@ -24,6 +24,9 @@ headings:
 #   url       -> "linkedin.com/in/x"
 link_text: label
 
+# Your city / address in the header line (email | phone | links). Off: recruiters don't need it.
+show_location: false
+
 # Achievements = the resume's achievements + certifications (awards, wins, certs)
 achievements_include_certifications: true
 

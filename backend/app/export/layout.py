@@ -100,6 +100,44 @@ def _bullet(bid: str, job, bullet, text: str, width: float, size: float) -> Bull
                         chars_to_save_line=len(last) + 1 if len(lines) > 1 else 0)
 
 
+def page_skill_lines(resume: Resume, width_pt: float, size_pt: float
+                     ) -> tuple[list[list[tuple[str, list[str]]]], list[str]]:
+    """The Skills lines exactly as printed: each fits on ONE printed line. A line that would wrap
+    drops its least relevant skill until it fits (resume.skill_rank, see skillkinds.rank; without
+    it: skills the job names, then skills your bullets show). Tools and Soft Skills keep at least
+    2 places (which other skills appear at all is decided before, by skillkinds.select). -> (lines, left off)."""
+    from app.export.builder import _kind_of, skill_groups, skills_line_text
+    from app.export.skillkinds import ALWAYS_TWO
+    from app.scoring.render import evidence_text
+    from app.scoring.synonyms import count_mentions
+    focus = "\n".join(resume.skill_focus)
+    bullets = evidence_text(resume)
+    ranks = resume.skill_rank
+
+    def worth(sk: str) -> float:
+        if sk in ranks:
+            return ranks[sk]
+        return 3 if focus and count_mentions(sk, focus) else 1 if count_mentions(sk, bullets) else 0
+
+    kind = {sk: _kind_of(sk, resume.skill_kinds) for sk in resume.skills}
+    lines, dropped = [], []
+    for parts in skill_groups(resume.skills, overrides=resume.skill_kinds):
+        label, items = parts[0][0], list(parts[0][1])
+        # a little room to spare: the bold label is wider than plain text
+        while len(items) > 1 and len(wrap(skills_line_text([(label, items)]), width_pt * 0.95, size_pt)) > 1:
+            count = {}
+            for x in items:
+                count[kind.get(x)] = count.get(kind.get(x), 0) + 1
+            choices = [i for i in range(len(items)) if kind.get(items[i]) not in ALWAYS_TWO
+                       or count[kind.get(items[i])] > 2]
+            if not choices:
+                break
+            weakest = min(choices, key=lambda i: (worth(items[i]), -i))
+            dropped.append(items.pop(weakest))
+        lines.append([(label, items)])
+    return lines, dropped
+
+
 def analyze(resume: Resume, look: Look, spec: dict | None = None) -> Layout:
     spec = spec or format_spec()
     usable = (A4_W_CM - 2 * look.margin_cm) / 2.54 * 72
@@ -110,9 +148,9 @@ def analyze(resume: Resume, look: Look, spec: dict | None = None) -> Layout:
         if section == "summary" and resume.summary:
             lay.other_lines += 1 + len(wrap(resume.summary, usable, look.body_pt))
         elif section == "skills" and resume.skills:
-            from app.export.builder import skill_groups, skills_line_text
-            lay.other_lines += 1 + sum(len(wrap(skills_line_text(parts), usable, look.body_pt))
-                                       for parts in skill_groups(resume.skills, overrides=resume.skill_kinds))
+            from app.export.builder import skills_line_text
+            lines, _ = page_skill_lines(resume, usable, look.body_pt)
+            lay.other_lines += 1 + sum(len(wrap(skills_line_text(parts), usable, look.body_pt)) for parts in lines)
         elif section == "experience" and resume.experience:
             lay.other_lines += 1
             for j, job in enumerate(resume.experience):
