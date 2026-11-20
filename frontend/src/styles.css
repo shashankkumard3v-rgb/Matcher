@@ -389,3 +389,9 @@ pre, .version-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-log li { background: var(--chip); border-radius: 10px; padding: 6px 10px; }
 
 .impact { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+
+.resume-chat { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.chat-log li.chat-ai { background: transparent; border: 1px solid var(--line); }
+.chat-log .impact { list-style: none; padding-left: 0; margin-top: 4px; }
+.chat-log .impact li { background: none; border: none; padding: 0; border-radius: 0; }
+.resume-chat textarea.qa-input { min-height: 72px; }

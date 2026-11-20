@@ -121,6 +121,7 @@ export const api = {
   exportGet: (id) => request("GET", `${R(id)}/export`),
   exportBuild: (id) => request("POST", `${R(id)}/export`),
   exportTrim: (id, option_ids) => request("POST", `${R(id)}/export/trim`, { option_ids }),
+  exportChat: (id, text) => request("POST", `${R(id)}/export/chat`, { text }),
   exportReopen: (id) => request("POST", `${R(id)}/export/reopen-loop`),
   fitStart: (id) => request("POST", `${R(id)}/export/fit/start`),
   fitApply: (id) => request("POST", `${R(id)}/export/fit/apply`),

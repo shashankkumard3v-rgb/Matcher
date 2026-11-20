@@ -203,6 +203,85 @@ def achievements_of(resume: Resume, spec: dict) -> list[str]:
     return items
 
 
+# Skills on the page: your skills sorted into 7 kinds, shown on at most 4 lines. When there are
+# more than 4 kinds, two related kinds share a line, each with its own label:
+#   Languages: Go, Python, SQL
+#   Backend: gRPC, FastAPI, Kafka | Frontend: React, Next.js
+#   Databases: PostgreSQL, Redis | Cloud & DevOps: AWS, Docker, Kubernetes
+#   Engineering: System Design, Microservices, Git | Soft Skills: Mentoring, Communication
+SKILL_KINDS = ["Languages", "Backend", "Frontend", "Databases", "Cloud & DevOps", "Engineering", "Soft Skills"]
+_KIND_FAMILIES = {"language": "Languages", "backend_framework": "Backend", "queue": "Backend",
+                  "frontend": "Frontend", "database": "Databases", "cache": "Databases",
+                  "cloud": "Cloud & DevOps", "orchestration": "Cloud & DevOps", "ci": "Cloud & DevOps",
+                  "iac": "Cloud & DevOps", "monitoring": "Cloud & DevOps"}
+_KIND_WORDS = {
+    "Languages": {"sql", "bash", "shell", "shell scripting", "powershell"},
+    "Backend": {"rest", "rest apis", "restful apis", "grpc", "graphql", "node.js", "express", "spring", "spring boot",
+                "django", "flask", "fastapi", ".net", "asp.net", "websockets", "celery", "kafka", "rabbitmq",
+                "api development", "backend development"},
+    "Frontend": {"react", "angular", "vue", "next.js", "html", "css", "tailwind", "tailwind css", "redux",
+                 "javascript frameworks", "frontend development", "react native", "flutter"},
+    "Databases": {"postgresql", "mysql", "mongodb", "redis", "elasticsearch", "dynamodb", "cassandra", "sqlite",
+                  "oracle", "sql server", "snowflake", "bigquery", "nosql", "databases"},
+    "Cloud & DevOps": {"aws", "gcp", "azure", "docker", "kubernetes", "terraform", "helm", "linux", "jenkins",
+                       "github actions", "ci/cd", "prometheus", "grafana", "nginx", "ansible", "devops", "cloud"},
+    "Engineering": {"system design", "distributed systems", "microservices", "event-driven architecture",
+                    "api design", "design patterns", "oop", "data structures and algorithms", "dsa", "algorithms",
+                    "concurrency", "async programming", "caching", "testing", "unit testing", "tdd", "git",
+                    "agile", "scrum", "code review", "performance optimization", "security", "scalability",
+                    "observability", "debugging", "low level design", "high level design"},
+    "Soft Skills": {"leadership", "communication", "mentoring", "teamwork", "collaboration", "problem solving",
+                    "stakeholder management", "ownership", "presentation", "time management",
+                    "cross-functional collaboration", "team leadership", "critical thinking", "adaptability"},
+}
+_PAIRS = [("Backend", "Frontend"), ("Databases", "Cloud & DevOps"), ("Engineering", "Soft Skills")]
+
+
+def _kind_of(skill: str, overrides: dict[str, str] | None = None) -> str:
+    from app.scoring.synonyms import canonical, family, is_language
+    key = skill.strip().lower()
+    for k, v in (overrides or {}).items():          # your own choice ("move Jira to Cloud & DevOps")
+        if k.strip().lower() == key and v in SKILL_KINDS:
+            return v
+    canon = canonical(skill).lower()
+    for kind, words in _KIND_WORDS.items():
+        if key in words or canon in words:
+            return kind
+    fam = "language" if is_language(skill) else family(skill)
+    if fam in _KIND_FAMILIES:
+        return _KIND_FAMILIES[fam]
+    return "Engineering"          # tools and practices we don't know (Jira, Figma, ...)
+
+
+def skill_groups(skills: list[str], max_lines: int = 4,
+                 overrides: dict[str, str] | None = None) -> list[list[tuple[str, list[str]]]]:
+    """Lines of (label, skills) parts: one kind per line while that fits in `max_lines`, else
+    related kinds share a line (Backend | Frontend, Databases | Cloud & DevOps,
+    Engineering | Soft Skills). Languages always has its own line."""
+    kinds: dict[str, list[str]] = {k: [] for k in SKILL_KINDS}
+    for sk in dict.fromkeys(x.strip() for x in skills if x and x.strip()):
+        kinds[_kind_of(sk, overrides)].append(sk)
+    used = [k for k in SKILL_KINDS if kinds[k]]
+    if not used:
+        return []
+    if len(used) == 1 and used[0] == "Engineering":
+        return [[("", kinds["Engineering"])]]               # nothing we can sort: one plain line
+    lines = [[(k, kinds[k])] for k in used]
+    pairs = list(_PAIRS)
+    while len(lines) > max_lines and pairs:
+        a, b = pairs.pop(0)
+        ia = next((i for i, ln in enumerate(lines) if ln[0][0] == a and len(ln) == 1), None)
+        ib = next((i for i, ln in enumerate(lines) if ln[0][0] == b and len(ln) == 1), None)
+        if ia is not None and ib is not None:
+            lines[ia] = lines[ia] + lines[ib]
+            lines.pop(ib)
+    return lines
+
+
+def skills_line_text(parts: list[tuple[str, list[str]]]) -> str:
+    return " | ".join((f"{label}: " if label else "") + ", ".join(items) for label, items in parts)
+
+
 def build_docx(resume: Resume, look: Look, spec: dict | None = None) -> bytes:
     spec = spec or format_spec()
     family = spec.get("font", {}).get("family", "Calibri")
@@ -282,8 +361,16 @@ def build_docx(resume: Resume, look: Look, spec: dict | None = None) -> bytes:
             _para_format(p, look, after=look.para_after_pt)
         elif section == "skills" and resume.skills:
             heading(heads.get("skills", "SKILLS"))
-            p = doc.add_paragraph(", ".join(resume.skills))
-            _para_format(p, look, after=look.para_after_pt)
+            lines = skill_groups(resume.skills, overrides=resume.skill_kinds)
+            for i, parts in enumerate(lines):
+                p = doc.add_paragraph()
+                _para_format(p, look, after=look.para_after_pt if i == len(lines) - 1 else 1)
+                for j, (label, items) in enumerate(parts):
+                    if j:
+                        p.add_run(" | ")
+                    if label:
+                        p.add_run(f"{label}: ").bold = True
+                    p.add_run(", ".join(items))
         elif section == "experience" and resume.experience:
             heading(heads.get("experience", "EXPERIENCE"))
             for i, job in enumerate(resume.experience):
@@ -306,18 +393,18 @@ def build_docx(resume: Resume, look: Look, spec: dict | None = None) -> bytes:
                     bullet(a)
         elif section == "education" and resume.education:
             heading(heads.get("education", "EDUCATION"))
-            for e in resume.education:
+            for i, e in enumerate(resume.education):
+                # line 1: degree (bold) ............ dates   line 2: school | CGPA / details
                 p = doc.add_paragraph()
-                _para_format(p, look, after=look.para_after_pt)
+                _para_format(p, look, after=0, before=0 if i == 0 else look.para_after_pt + 1)
                 p.paragraph_format.tab_stops.add_tab_stop(Cm(usable_cm), WD_TAB_ALIGNMENT.RIGHT)
                 p.add_run(e.degree or e.institution or "").bold = True
-                if e.degree and e.institution:
-                    p.add_run(f" | {e.institution}")
                 dates = " - ".join(x for x in (fmt_date(e.start), fmt_date(e.end)) if x)
                 if dates:
                     p.add_run("\t" + dates)
-                if e.details:
-                    d = doc.add_paragraph(e.details)
+                second = " | ".join(x for x in ((e.institution if e.degree else None), e.details) if x)
+                if second:
+                    d = doc.add_paragraph(second)
                     _para_format(d, look, after=look.para_after_pt)
         elif section == "certifications" and resume.certifications:
             heading(heads.get("certifications", "CERTIFICATIONS"))

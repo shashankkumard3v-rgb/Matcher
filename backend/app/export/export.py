@@ -50,7 +50,12 @@ def _edir(d: Path) -> Path:
 
 def load_state(d: Path) -> ExportState | None:
     p = d / "export" / "export.json"
-    return ExportState.model_validate_json(p.read_text(encoding="utf-8")) if p.exists() else None
+    if not p.exists():
+        return None
+    st = ExportState.model_validate_json(p.read_text(encoding="utf-8"))
+    from app.export.edit import load_chat
+    st.chat = load_chat(d)
+    return st
 
 
 def _save(d: Path, s: ExportState) -> None:
@@ -141,6 +146,8 @@ async def build(d: Path, history: list[str] | None = None) -> ExportState:
         history=(history or []),
         files={"docx": docx_name, "pdf": pdf_name, "report": "report.md"},
     )
+    from app.export.edit import load_chat
+    state.chat = load_chat(d)
     line_pt = fit.look["body_pt"] * fit.look["line_spacing"] * 1.2
     usable_pt = (29.7 - 2 * fit.look["margin_cm"]) / 2.54 * 72
     if fit.status == FITTED:

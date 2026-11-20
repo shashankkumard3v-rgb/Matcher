@@ -110,7 +110,9 @@ def analyze(resume: Resume, look: Look, spec: dict | None = None) -> Layout:
         if section == "summary" and resume.summary:
             lay.other_lines += 1 + len(wrap(resume.summary, usable, look.body_pt))
         elif section == "skills" and resume.skills:
-            lay.other_lines += 1 + len(wrap(", ".join(resume.skills), usable, look.body_pt))
+            from app.export.builder import skill_groups, skills_line_text
+            lay.other_lines += 1 + sum(len(wrap(skills_line_text(parts), usable, look.body_pt))
+                                       for parts in skill_groups(resume.skills, overrides=resume.skill_kinds))
         elif section == "experience" and resume.experience:
             lay.other_lines += 1
             for j, job in enumerate(resume.experience):
@@ -126,7 +128,8 @@ def analyze(resume: Resume, look: Look, spec: dict | None = None) -> Layout:
         elif section == "education" and resume.education:
             lay.other_lines += 1                         # heading
             for e in resume.education:
-                lay.other_lines += 1                     # degree - school    dates
-                if e.details:
-                    lay.other_lines += len(wrap(e.details, usable, look.body_pt))
+                lay.other_lines += 1                     # degree ........ dates
+                second = " | ".join(x for x in ((e.institution if e.degree else None), e.details) if x)
+                if second:
+                    lay.other_lines += len(wrap(second, usable, look.body_pt))
     return lay

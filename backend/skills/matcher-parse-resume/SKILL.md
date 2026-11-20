@@ -44,6 +44,9 @@ Reply with ONLY a JSON object (no prose, no code fences) matching this shape:
 }
 ```
 
+education.details: grades and extras exactly as written, e.g. "CGPA: 8.6/10", "GPA 3.7/4.0",
+"First Class with Distinction", "78%", relevant coursework. Never drop a grade.
+
 ## What happens after you
 
 Matcher checks every bullet, company and job title you return against the original

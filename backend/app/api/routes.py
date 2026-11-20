@@ -534,6 +534,17 @@ async def export_trim(run_id: str, body: TrimBody, llm: LLMClient = Depends(get_
         raise _export_errors(e)
 
 
+@router.post("/runs/{run_id}/export/chat", response_model=ExportState)
+async def export_chat(run_id: str, body: TextBody, llm: LLMClient = Depends(get_llm)):
+    """Tell the AI what to change on the finished resume; code checks each change, applies the
+    safe ones as a new version and rebuilds the page."""
+    from app.export import edit
+    try:
+        return await edit.chat(llm, _run(run_id), body.text)
+    except Exception as e:
+        raise _export_errors(e)
+
+
 @router.post("/runs/{run_id}/export/reopen-loop", response_model=LoopState)
 async def export_reopen(run_id: str):
     """Too short: go back to the improve loop to add content (a note says how much room)."""

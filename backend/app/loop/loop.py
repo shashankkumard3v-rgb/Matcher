@@ -799,6 +799,17 @@ async def trim_version(llm: LLMClient, d: Path, removals: list[tuple[int, str]],
     return v
 
 
+async def edit_version(llm: LLMClient, d: Path, resume: Resume, note: str,
+                       score: ScoreResult | None = None) -> Version:
+    """A version made from the resume chat (Step 3). score=None -> blind re-score; a layout-only
+    change (skill lines, bullet order) keeps the previous score."""
+    s = _require(d)
+    v = await _save_version(llm, d, s, resume, runs.load_jd(d), note, score=score)
+    s.current_version = s.final_version = v.n
+    save_state(d, s)
+    return v
+
+
 def open_fit_round(d: Path, layout: dict, problems: list, questions: list) -> LoopState:
     """Start a one-page fit round (called by the export step)."""
     s = _require(d)

@@ -50,6 +50,8 @@ class Resume(BaseModel):
     achievements: list[str] = Field(default_factory=list)  # awards, wins, recognitions
     languages: list[str] = Field(default_factory=list)  # spoken languages
     projects: list[ResumeProject] = Field(default_factory=list)
+    # page layout only: which Skills line a skill goes on, when you've said so ("Jira" -> "Cloud & DevOps")
+    skill_kinds: dict[str, str] = Field(default_factory=dict)
     unparsed: list[str] = Field(
         default_factory=list,
         description="Text the parser could not place in a section.",
@@ -391,6 +393,15 @@ class FreshScore(BaseModel):
     loop_score: Optional[float] = None
 
 
+class ChatTurn(BaseModel):
+    """One message in the resume chat (Step 3)."""
+    role: str                     # you | ai
+    text: str
+    done: list[str] = Field(default_factory=list)      # what was changed
+    refused: list[str] = Field(default_factory=list)   # what wasn't, and why
+    version: Optional[int] = None                       # the version this made
+
+
 class ExportState(BaseModel):
     run_id: str
     version: int
@@ -407,3 +418,4 @@ class ExportState(BaseModel):
     files: dict = Field(default_factory=dict)   # docx / pdf / report -> file name
     ats: list[AtsCheck] = Field(default_factory=list)
     history: list[str] = Field(default_factory=list)
+    chat: list[ChatTurn] = Field(default_factory=list)

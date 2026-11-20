@@ -189,5 +189,23 @@ def test_the_resume_has_an_education_section():
                education=[Education(degree="B.Tech Computer Science", institution="XYZ University",
                                     start="2015", end="2019", details="CGPA 8.6/10")])
     text = "\n".join(p.text for p in Document(io.BytesIO(build_docx(r, Look.at(0)))).paragraphs)
-    assert "EDUCATION" in text and "B.Tech Computer Science | XYZ University" in text and "CGPA 8.6/10" in text
+    assert "EDUCATION" in text and "B.Tech Computer Science\t2015 - 2019" in text   # dates on the degree line
+    assert "XYZ University | CGPA 8.6/10" in text
     assert text.index("EXPERIENCE") < text.index("EDUCATION")
+
+
+
+def test_skills_are_sorted_by_kind_on_at_most_four_lines():
+    from app.export.builder import skill_groups, skills_line_text
+    lines = skill_groups(["Go", "Python", "SQL", "FastAPI", "gRPC", "Kafka", "React", "Next.js", "PostgreSQL", "Redis",
+                          "AWS", "Docker", "Kubernetes", "System Design", "Microservices", "Git", "Jira",
+                          "Mentoring", "Communication"])
+    text = [skills_line_text(p) for p in lines]
+    assert len(lines) == 4
+    assert text[0] == "Languages: Go, Python, SQL"
+    assert text[1] == "Backend: FastAPI, gRPC, Kafka | Frontend: React, Next.js"
+    assert text[2] == "Databases: PostgreSQL, Redis | Cloud & DevOps: AWS, Docker, Kubernetes"
+    assert text[3] == "Engineering: System Design, Microservices, Git, Jira | Soft Skills: Mentoring, Communication"
+    few = [skills_line_text(p) for p in skill_groups(["Python", "Django", "PostgreSQL", "AWS"])]
+    assert few == ["Languages: Python", "Backend: Django", "Databases: PostgreSQL", "Cloud & DevOps: AWS"]   # no sharing needed
+    assert skill_groups(["Excel"]) == [[("", ["Excel"])]]

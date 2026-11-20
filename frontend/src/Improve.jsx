@@ -974,6 +974,54 @@ function SaveToLibrary({ runId, version }) {
   );
 }
 
+// Chat about the finished page: "move Jira to Cloud & DevOps", "shorten the 2nd bullet at Gruve".
+// The AI turns it into changes; code checks each one; every change makes a new version.
+function ResumeChat({ runId, exp, setExport, onChanged }) {
+  const a = useAction(runId, "export-chat");
+  const [text, setText] = useKept(`export-chat:${runId}`, "");
+  const end = useRef(null);
+  const chat = exp.chat || [];
+  useEffect(() => { end.current?.scrollIntoView?.({ block: "nearest" }); }, [chat.length]);
+  async function send() {
+    const t = text.trim();
+    if (!t) return;
+    const out = await a.run("Making the change and rebuilding the page…", () => api.exportChat(runId, t));
+    if (out) { setExport(out); setText(""); onChanged?.(); }
+  }
+  return (
+    <div className="stack-sm resume-chat">
+      <div className="small strong">Change something on this page</div>
+      <div className="small muted">
+        Tell the AI what to change, e.g. "move Jira to Cloud &amp; DevOps", "put the 3rd bullet at Gruve first",
+        "shorten the summary to one line", "add my CGPA 7.6/10". It never adds facts you haven't given;
+        every change makes a new version, so you can always go back.
+      </div>
+      {chat.length > 0 && (
+        <ul className="chat-log small">
+          {chat.map((t, i) => (
+            <li key={i} className={t.role === "you" ? "" : "chat-ai"}>
+              <span className="muted">{t.role === "you" ? "You:" : "AI:"}</span> {t.text}
+              {t.done?.length > 0 && <ul className="impact">{t.done.map((x, j) => <li key={j}>✓ {x}</li>)}</ul>}
+              {t.refused?.length > 0 && <ul className="impact warn-text">{t.refused.map((x, j) => <li key={j}>✗ {x}</li>)}</ul>}
+              {t.version != null && <div className="muted">→ v{t.version}</div>}
+            </li>
+          ))}
+          <li ref={end} style={{ display: "none" }} />
+        </ul>
+      )}
+      <textarea className="editor qa-input" rows={2} value={text} disabled={!!a.busy}
+                placeholder="What should change on the page?"
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send(); }} />
+      <div>
+        <button className="btn btn-primary" disabled={!text.trim() || !!a.busy} onClick={send}>Send</button>
+      </div>
+      <Err msg={a.error} />
+      <Busy label={a.busy} />
+    </div>
+  );
+}
+
 function ExportCard({ runId, exp, setExport, setLoop }) {
   const a = useAction(runId, "export");
   const [show, setShow] = useState(false);
@@ -998,6 +1046,8 @@ function ExportCard({ runId, exp, setExport, setLoop }) {
                alt="Your one-page resume" />
         </div>
       )}
+
+      <ResumeChat runId={runId} exp={exp} setExport={setExport} onChanged={() => setShow(true)} />
 
       <AtsList checks={exp.ats || []} />
       <FreshScore runId={runId} exp={exp} />
