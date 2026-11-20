@@ -25,30 +25,37 @@ Full plan: https://claude.ai/artifact/C7BEcbaFZK9out9R4C7YVe
 | 5 | One-page A4 Word export, `/api/runs/{run_id}/export/...` | Done |
 | 6 | Phone/desktop app: upload + score screens (`frontend/`) | In progress |
 
-## Run it (Windows)
+## Run it on your computer (development)
 
-1. Install Python 3.11+ from python.org (tick "Add Python to PATH").
-2. Double-click `backend\run.bat`. The first run sets everything up and creates `backend\.env`.
-3. Open `backend\.env` and paste at least one key, then run `run.bat` again.
-   Matcher uses the first one it finds, in this order (change it in `config\models.yaml`):
-   - `ANTHROPIC_API_KEY` (https://platform.claude.com) -> Claude, steps run as **Agent Skills**
-   - `GEMINI_API_KEY` (https://aistudio.google.com) -> Gemini, steps run as **prompts**
-   - `OPENROUTER_API_KEY` (https://openrouter.ai/keys) -> many models, steps run as **prompts**
-   - `OPENAI_API_KEY` (+ `OPENAI_BASE_URL` for Groq, Ollama, ...) -> steps run as **prompts**
-     (set the model names under `openai:` in `config\models.yaml` first)
-   Use a paid key for your real resume: free tiers may use what you send to train models.
-4. For the Word export, Microsoft Word (installed with Office) is used to measure the page.
-   No Word? Install LibreOffice (free) instead.
-5. Set up **Sign in with Google** and the database once (next section), then open
-   **http://localhost:8000** (exactly this address) and sign in. See `frontend/README.md`.
-6. The full API (gate, loop, export) is at http://localhost:8000/docs
-   - `POST /api/parse` with your resume PDF and a JD -> copy the `run_id`
-   - `POST /api/runs/{run_id}/score` -> the score, broken down by dimension
-   - `POST /api/runs/{run_id}/gate` -> apply / don't apply, questions, explanation
-   - `POST /api/runs/{run_id}/gate/decide` with `{"decision": "proceed"}` -> then the loop below
+Online, Matcher runs on Render from the Docker image (see "Deploy online" below). To work on it
+locally you need Python 3.11+ (and Node.js 20+ only if you change the screens):
 
-Only this laptop can open Matcher (the server listens on 127.0.0.1). Phone access comes back
-with HTTPS when the server moves to the cloud: Google sign-in doesn't work on http://<IP> addresses.
+```
+cd backend
+python -m venv .venv
+.venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+copy .env.example .env             # macOS/Linux: cp .env.example .env  -> then paste your keys
+uvicorn app.main:app --reload --port 8000
+```
+
+Open **http://localhost:8000** (exactly this address: Google sign-in needs it).
+If the project folder is in OneDrive, set `WATCHFILES_FORCE_POLLING=true` first so `--reload`
+notices your edits. Tests: `pytest` in the `backend` folder.
+
+Keys in `backend/.env` (Matcher uses the first one it finds, in this order; change it in
+`config/models.yaml`). With more than one key, the next provider answers when the first is busy:
+- `ANTHROPIC_API_KEY` (https://platform.claude.com) -> Claude, steps run as **Agent Skills**
+- `GEMINI_API_KEY` (https://aistudio.google.com) -> Gemini, steps run as **prompts**
+- `OPENROUTER_API_KEY` (https://openrouter.ai/keys) -> many models (some free), as **prompts**
+- `OPENAI_API_KEY` (+ `OPENAI_BASE_URL` for Groq, Ollama, ...) -> as **prompts**
+  (set the model names under `openai:` in `config/models.yaml` first)
+Use a paid key for your real resume: free tiers may use what you send to train models.
+
+The Word export measures the page with LibreOffice (installed in the Docker image; on your
+computer install LibreOffice, or Microsoft Word is used if present).
+
+The full API is at http://localhost:8000/docs.
 
 ## Sign in with Google + MongoDB (one-time setup)
 
@@ -72,26 +79,8 @@ Your old notes files are copied into the database the first time you sign in.
    `http://localhost:5173` if you use the live-reload dev server (`npm run dev`).
    Copy the *Client ID* into `backend\.env`: `GOOGLE_CLIENT_ID=1234-abc.apps.googleusercontent.com`
    (While the consent screen is in "Testing", add the Google accounts that may sign in as test users.)
-3. Double-click `backend\check_setup.bat`: it checks every setting and connects to MongoDB,
-   and tells you exactly what's wrong (it never shows passwords or keys).
-4. Close the server window, double-click `run.bat` (it installs new packages by itself) and open
-   http://localhost:8000. The sign-in screen also shows if the database can't be reached.
-
-Tests: double-click `backend\run_tests.bat`.
-
-**Auto-restart (like nodemon).** The server restarts by itself when files in `backend\app`,
-`backend\config` or `backend\skills` change. Saved runs and your notes don't trigger a restart.
-Because the project is in OneDrive (which doesn't always announce file changes), it checks the
-files by polling. Manual command with the same behaviour, from the `backend` folder:
-
-```
-.venv\Scripts\python.exe serve.py
-```
-
-If the server ever misses an update anyway, the app shows **"Restart the server"** at the top:
-close the server window and start `run.bat` again.
-
-The web app (`frontend\dist`) needs no restart at all: refresh the browser (Ctrl+F5).
+3. Restart the server and open http://localhost:8000. The sign-in screen shows if the database
+   can't be reached.
 
 ## Deploy online (one service: web app + API together)
 
@@ -250,8 +239,8 @@ Each round:
 ## The Word file (one full A4 page)
 
 After `POST .../loop/finish`, `POST /api/runs/{run_id}/export` builds the resume:
-Summary, Skills, Experience, Achievements (achievements + certifications), contact at the
-top. One column, no tables or icons, real Word bullets, dates right-aligned.
+Summary, Skills, Experience, Achievements (achievements + certifications), Education, contact
+at the top. One column, no tables or icons, real Word bullets, dates right-aligned.
 
 **One full page, every time.** Matcher renders the file, measures how full the page is,
 and adjusts font size (10-11.5pt), spacing and margins (1.27-2.0 cm) until page 1 is
@@ -309,7 +298,7 @@ starting point and are used by the tests):
 | `project_context.md` | The structured version (one `## Project:` block per project). The AI adds entries here when you answer its questions. |
 
 Lines starting with `#` in the `.txt` files are comments (each file explains itself at the top).
-In the app you can also upload a `.txt` file into either notes file (add to the end, or replace).
+In the app you can also upload a Word (.docx), PDF or `.txt` file into either notes file (add to the end, or replace).
 All three count as your facts: the rewrite may use them, the truth check accepts quotes from them,
 and the gate counts them toward your best possible score.
 

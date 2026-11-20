@@ -1,12 +1,8 @@
 # Matcher app (frontend)
 
-A React web app, already built into `dist/`. The Python server serves it, so you don't
-need Node.js to use it:
-
-1. Run `backend\run.bat`.
-2. Open http://localhost:8000 (exactly this address) and **Sign in with Google**
-   (one-time setup in the main README). Only this laptop can open it for now; phone access
-   returns with HTTPS when the server moves to the cloud.
+A React web app. Online, the Docker image builds it and the Python server serves it from the
+same address. On your computer: build it once (`npm run build`, below), start the server
+(main README) and open http://localhost:8000, then **Sign in with Google**.
 
 ## What's in the app now
 

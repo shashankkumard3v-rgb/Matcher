@@ -167,14 +167,16 @@ function NotesEditor({ kind }) {
       <div className="row wrap">
         <span className="upload-group">
           <button className="btn" onClick={() => fileInput.current?.click()} disabled={busy}>
-            Upload .txt
+            Upload a file
           </button>
           <select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Upload mode" disabled={busy}>
             <option value="append">add to the end</option>
             <option value="replace">replace everything</option>
           </select>
-          <input ref={fileInput} type="file" accept=".txt,.md,text/plain" hidden onChange={(e) => upload(e.target.files[0])} />
+          <input ref={fileInput} type="file" accept=".docx,.pdf,.txt,.md,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                 hidden onChange={(e) => { upload(e.target.files[0]); e.target.value = ""; }} />
         </span>
+        <span className="small muted">Word (.docx), PDF or text. Long documents are fine.</span>
       </div>
       {status && <div className={`alert ${status.kind === "ok" ? "alert-ok" : "alert-bad"}`}>{status.msg}</div>}
     </div>

@@ -474,6 +474,16 @@ function Change({ c, busy, onAction, wordCap = 32 }) {
         </div>
       )}
       {c.why && <div className="small muted">{c.why}</div>}
+      {c.impact?.length > 0 && (
+        c.kind === "remove_bullet" ? (
+          <ul className="small impact">{c.impact.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        ) : (
+          <details className="small">
+            <summary className="muted">What this changes</summary>
+            <ul className="impact">{c.impact.map((x, i) => <li key={i}>{x}</li>)}</ul>
+          </details>
+        )
+      )}
       {c.sources?.length > 0 && (
         <details className="small">
           <summary className="muted">Based on</summary>

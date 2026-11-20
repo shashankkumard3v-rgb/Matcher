@@ -45,7 +45,7 @@ async function send(method, path, body) {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new ApiError("Can't reach the Matcher server. Is run.bat still running?", { status: 0 });
+    throw new ApiError("Can't reach the Matcher server. Check your connection and try again.", { status: 0 });
   }
   const data = await res.json().catch(() => null);
   if (!res.ok) throw errorFrom(res.status, data);
@@ -167,7 +167,7 @@ export function uploadForParse(resume, jdText, onProgress) {
       if (e.lengthComputable) onProgress?.({ phase: "upload", pct: Math.round((e.loaded / e.total) * 100) });
     };
     xhr.upload.onload = () => onProgress?.({ phase: "reading", pct: 100 });
-    xhr.onerror = () => reject(new ApiError("Can't reach the Matcher server. Is run.bat still running?", { status: 0 }));
+    xhr.onerror = () => reject(new ApiError("Can't reach the Matcher server. Check your connection and try again.", { status: 0 }));
     xhr.onload = () => {
       let data = null;
       try {

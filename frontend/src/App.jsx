@@ -37,7 +37,6 @@ function ProviderBadge() {
 // If you're typing in a box, show a banner instead so nothing you typed is lost.
 function useAutoRefresh() {
   const [stale, setStale] = useState(false);
-  const [serverOld, setServerOld] = useState(false);
   useEffect(() => {
     let known = null;
     let stop = false;
@@ -50,8 +49,7 @@ function useAutoRefresh() {
           quietUntil = Date.now() + 60000;
           return;
         }
-        const { version, server_outdated } = await res.json();
-        setServerOld(!!server_outdated);
+        const { version } = await res.json();
         if (!version) return;
         if (known === null) known = version;
         else if (version !== known) {
@@ -74,7 +72,7 @@ function useAutoRefresh() {
       document.removeEventListener("visibilitychange", check);
     };
   }, []);
-  return { stale, serverOld };
+  return { stale };
 }
 
 // What's still running (it keeps going when you change page); tap to go back to it.
@@ -138,7 +136,7 @@ function NavLinks({ page }) {
 }
 
 export default function App() {
-  const { stale, serverOld } = useAutoRefresh();
+  const { stale } = useAutoRefresh();
   const [user, setUser] = useState(undefined); // undefined = checking, null = signed out
   const [moved, setMoved] = useState([]);
 
@@ -191,13 +189,6 @@ export default function App() {
         <div className="alert alert-ok row wrap update-banner">
           Your earlier runs and My info notes are now in your account ({moved.length} item(s) moved).
           <button className="btn btn-sm" onClick={() => setMoved([])}>OK</button>
-        </div>
-      )}
-      {serverOld && (
-        <div className="alert alert-warn update-banner" role="alert">
-          <strong>Restart the server.</strong> Matcher's code on this laptop was updated, but the running
-          server is still using the old code, so new features may say "Not found". Close the server window
-          and double-click <code>backend\run.bat</code> (or press Ctrl+C and run <code>python serve.py</code>).
         </div>
       )}
       {stale && (
